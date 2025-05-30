@@ -1,0 +1,411 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Menu, X, ShoppingCart, User, LogOut, Heart, Package, Settings, BarChart3 } from 'lucide-react'
+import { useCart } from '../contexts/CartContext'
+import { useAuth } from '../contexts/AuthContext'
+import CartSidebar from './CartSidebar'
+import AuthModal from './AuthModal'
+import Avatar from './Avatar'
+
+export default function Header() {
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isCartOpen, setIsCartOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authModalMode, setAuthModalMode] = useState('login')
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  
+  const { getTotalItems } = useCart()
+  const { user, isAuthenticated, isAdmin, logout } = useAuth()
+  const router = useRouter()
+
+  const navItems = [
+    { name: '홈', href: '#home' },
+    { name: '교재', href: '#products' },
+    { name: '소개', href: '#about' },
+    { name: '문의', href: '#contact' }
+  ]
+
+  const handleCartClick = () => {
+    setIsCartOpen(true)
+    setIsMenuOpen(false)
+  }
+
+  const handleAuthClick = (mode) => {
+    setAuthModalMode(mode)
+    setIsAuthModalOpen(true)
+    setIsMenuOpen(false)
+  }
+
+  const handleLogout = () => {
+    logout()
+    setIsUserMenuOpen(false)
+    setIsMenuOpen(false)
+    // 관리자 페이지에서 로그아웃 시 홈으로 이동
+    if (window.location.pathname.startsWith('/admin')) {
+      router.push('/')
+    }
+  }
+
+  return (
+    <>
+      <header className="fixed w-full top-0 z-40 bg-white/95 backdrop-blur-lg border-b border-white/20">
+        <nav className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            {/* 로고 */}
+            <div 
+              className="text-2xl font-bold gradient-text cursor-pointer"
+              onClick={() => router.push('/')}
+            >
+              Pretium Sound
+            </div>
+
+            {/* 데스크톱 네비게이션 */}
+            <div className="hidden md:flex items-center space-x-8">
+              {navItems.map((item) => (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200"
+                >
+                  {item.name}
+                </a>
+              ))}
+              
+              {/* 관리자 전용 메뉴 */}
+              {isAdmin && (
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="flex items-center space-x-2 text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 bg-indigo-50 px-3 py-2 rounded-lg"
+                >
+                  <BarChart3 size={18} />
+                  <span>관리자</span>
+                </button>
+              )}
+              
+              {/* 장바구니 아이콘 */}
+              <button 
+                onClick={handleCartClick}
+                className="relative p-2 text-gray-700 hover:text-indigo-600 transition-colors duration-200"
+              >
+                <ShoppingCart size={24} />
+                {getTotalItems() > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                    {getTotalItems()}
+                  </span>
+                )}
+              </button>
+
+              {/* 사용자 메뉴 */}
+              {isAuthenticated ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <Avatar name={user?.name} size={32} className="flex-shrink-0" />
+                    <div className="text-left">
+                      <span className="text-gray-700 font-medium block">{user?.name || 'User'}</span>
+                      {isAdmin && (
+                        <span className="text-xs text-indigo-600 font-medium">관리자</span>
+                      )}
+                    </div>
+                  </button>
+
+                  {/* 사용자 드롭다운 메뉴 */}
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                      <div className="px-4 py-2 border-b border-gray-200">
+                        <p className="text-sm font-medium text-gray-800">{user?.name}</p>
+                        <p className="text-xs text-gray-500">{user?.email}</p>
+                        {isAdmin && (
+                          <span className="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                            관리자
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* 일반 사용자 메뉴 */}
+                      <button 
+                        onClick={() => {
+                          router.push('/profile')
+                          setIsUserMenuOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                      >
+                        <User size={16} />
+                        <span>내 프로필</span>
+                      </button>
+                      
+                      <button 
+                        onClick={() => {
+                          router.push('/wishlist')
+                          setIsUserMenuOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                      >
+                        <Heart size={16} />
+                        <span>위시리스트</span>
+                        {user?.wishlist?.length > 0 && (
+                          <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
+                            {user.wishlist.length}
+                          </span>
+                        )}
+                      </button>
+                      
+                      <button 
+                        onClick={() => {
+                          router.push('/orders')
+                          setIsUserMenuOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                      >
+                        <Package size={16} />
+                        <span>주문 내역</span>
+                        {user?.orders?.length > 0 && (
+                          <span className="bg-indigo-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
+                            {user.orders.length}
+                          </span>
+                        )}
+                      </button>
+                      
+                      {/* 관리자 전용 메뉴 */}
+                      {isAdmin && (
+                        <>
+                          <hr className="my-2" />
+                          <div className="px-4 py-1">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">관리자 메뉴</p>
+                          </div>
+                          
+                          <button 
+                            onClick={() => {
+                              router.push('/admin')
+                              setIsUserMenuOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                          >
+                            <BarChart3 size={16} />
+                            <span>관리자 대시보드</span>
+                          </button>
+                          
+                          <button 
+                            onClick={() => {
+                              router.push('/admin/products')
+                              setIsUserMenuOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                          >
+                            <Package size={16} />
+                            <span>상품 관리</span>
+                          </button>
+                          
+                          <button 
+                            onClick={() => {
+                              router.push('/admin/orders')
+                              setIsUserMenuOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                          >
+                            <ShoppingCart size={16} />
+                            <span>주문 관리</span>
+                          </button>
+                        </>
+                      )}
+                      
+                      <hr className="my-2" />
+                      
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                      >
+                        <LogOut size={16} />
+                        <span>로그아웃</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={() => handleAuthClick('login')}
+                    className="text-gray-700 hover:text-indigo-600 font-medium transition-colors"
+                  >
+                    로그인
+                  </button>
+                  <button
+                    onClick={() => handleAuthClick('signup')}
+                    className="bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors"
+                  >
+                    회원가입
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 모바일 메뉴 버튼과 장바구니 */}
+            <div className="md:hidden flex items-center space-x-2">
+              <button 
+                onClick={handleCartClick}
+                className="relative p-2 text-gray-700"
+              >
+                <ShoppingCart size={24} />
+                {getTotalItems() > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                    {getTotalItems()}
+                  </span>
+                )}
+              </button>
+              
+              {isAuthenticated && (
+                <button className="p-2 relative">
+                  <Avatar name={user?.name} size={24} />
+                  {isAdmin && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full"></div>
+                  )}
+                </button>
+              )}
+              
+              <button
+                className="p-2"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+
+          {/* 모바일 메뉴 */}
+          {isMenuOpen && (
+            <div className="md:hidden mt-4 pb-4 border-t border-gray-200">
+              <div className="flex flex-col space-y-2 pt-4">
+                {navItems.map((item) => (
+                  <a
+                    key={item.name}
+                    href={item.href}
+                    className="text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors duration-200"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {item.name}
+                  </a>
+                ))}
+                
+                {/* 관리자 전용 모바일 메뉴 */}
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      router.push('/admin')
+                      setIsMenuOpen(false)
+                    }}
+                    className="text-left text-indigo-600 hover:text-indigo-800 font-medium py-2 transition-colors flex items-center space-x-2"
+                  >
+                    <BarChart3 size={18} />
+                    <span>관리자 대시보드</span>
+                  </button>
+                )}
+                
+                {/* 모바일 인증 버튼 */}
+                {!isAuthenticated ? (
+                  <>
+                    <button
+                      onClick={() => handleAuthClick('login')}
+                      className="text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors"
+                    >
+                      로그인
+                    </button>
+                    <button
+                      onClick={() => handleAuthClick('signup')}
+                      className="text-left bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors mt-2"
+                    >
+                      회원가입
+                    </button>
+                  </>
+                ) : (
+                  <div className="border-t border-gray-200 pt-4 mt-4">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <Avatar name={user?.name} size={40} />
+                      <div>
+                        <p className="font-medium text-gray-800">{user?.name}</p>
+                        <p className="text-sm text-gray-500">{user?.email}</p>
+                        {isAdmin && (
+                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                            관리자
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        router.push('/profile')
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors"
+                    >
+                      내 프로필
+                    </button>
+                    <button 
+                      onClick={() => {
+                        router.push('/wishlist')
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors flex items-center justify-between"
+                    >
+                      <span>위시리스트</span>
+                      {user?.wishlist?.length > 0 && (
+                        <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
+                          {user.wishlist.length}
+                        </span>
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        router.push('/orders')
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors flex items-center justify-between"
+                    >
+                      <span>주문 내역</span>
+                      {user?.orders?.length > 0 && (
+                        <span className="bg-indigo-500 text-white text-xs rounded-full px-2 py-0.5">
+                          {user.orders.length}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left text-red-600 hover:text-red-800 font-medium py-2 transition-colors"
+                    >
+                      로그아웃
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </nav>
+
+        {/* 외부 클릭시 사용자 메뉴 닫기 */}
+        {isUserMenuOpen && (
+          <div 
+            className="fixed inset-0 z-30" 
+            onClick={() => setIsUserMenuOpen(false)}
+          />
+        )}
+      </header>
+
+      {/* 장바구니 사이드바 */}
+      <CartSidebar 
+        isOpen={isCartOpen} 
+        onClose={() => setIsCartOpen(false)} 
+      />
+
+      {/* 인증 모달 */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+      />
+    </>
+  )
+}
