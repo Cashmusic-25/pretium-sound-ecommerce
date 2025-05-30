@@ -461,7 +461,7 @@ export default function AdminReviewsPage() {
             
             <div className="mb-6">
               <p className="text-gray-600 mb-4">
-                "<strong>{reviewToDelete.userName}</strong>"님의 리뷰를 정말 삭제하시겠습니까?
+                &quot;<strong>{reviewToDelete.userName}</strong>&quot;님의 리뷰를 정말 삭제하시겠습니까?
               </p>
               
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">

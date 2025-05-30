@@ -16,7 +16,8 @@ import {
   Heart,
   Star,
   Eye,
-  MoreVertical
+  MoreVertical,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import Header from '../../components/Header'

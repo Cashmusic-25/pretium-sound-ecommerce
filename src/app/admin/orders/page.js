@@ -539,7 +539,7 @@ export default function AdminOrdersPage() {
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">주문 상태 변경</h3>
             <p className="text-gray-600 mb-6">
-              주문번호 "<strong>{selectedOrder.orderNumber}</strong>"의 상태를 
+              주문번호 &quot;<strong>{selectedOrder.orderNumber}</strong>&quot;의 상태를
               "<strong className="text-indigo-600">{STATUS_LABELS[newStatus]}</strong>"로 변경하시겠습니까?
             </p>
             
