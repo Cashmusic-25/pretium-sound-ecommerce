@@ -28,6 +28,12 @@ export default function AdminProductEditPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isBasicProduct, setIsBasicProduct] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // 클라이언트 마운트 감지
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const [productForm, setProductForm] = useState({
     title: '',
@@ -62,13 +68,15 @@ export default function AdminProductEditPage() {
   ]
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (isMounted && !isAdmin) {
       router.push('/')
       return
     }
 
-    loadProduct()
-  }, [isAdmin, router, params.id])
+    if (isMounted && params?.id) {
+      loadProduct()
+    }
+  }, [isMounted, isAdmin, router, params?.id])
 
   const loadProduct = () => {
     setIsLoadingProduct(true)
@@ -76,56 +84,70 @@ export default function AdminProductEditPage() {
     try {
       const productId = parseInt(params.id)
       
-      // 관리자가 추가한 상품들
-      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-      // 기본 상품 오버라이드
-      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-      
-      // 먼저 기본 상품에서 찾기
-      let foundProduct = products.find(p => p.id === productId)
-      
-      if (foundProduct) {
-        // 기본 상품이면 오버라이드 적용
-        foundProduct = { ...foundProduct, ...productOverrides[productId] }
-        setIsBasicProduct(true)
-      } else {
-        // 관리자가 추가한 상품에서 찾기
-        foundProduct = savedProducts.find(p => p.id === productId)
-        setIsBasicProduct(false)
-      }
-
-      if (!foundProduct) {
-        setError('상품을 찾을 수 없습니다.')
-        return
-      }
-
-      setProduct(foundProduct)
-      
-      // 폼에 상품 데이터 설정
-      setProductForm({
-        title: foundProduct.title || '',
-        description: foundProduct.description || '',
-        detailedDescription: foundProduct.detailedDescription || foundProduct.description || '',
-        price: foundProduct.price ? foundProduct.price.replace(/[₩,]/g, '') : '',
-        icon: foundProduct.icon || '🎵',
-        image: foundProduct.image || null,
-        imagePreview: foundProduct.image || null,
-        category: foundProduct.category || '',
-        features: foundProduct.features?.length > 0 ? foundProduct.features : [''],
-        contents: foundProduct.contents?.length > 0 ? foundProduct.contents : [''],
-        specifications: {
-          '페이지 수': foundProduct.specifications?.['페이지 수'] || '',
-          '난이도': foundProduct.specifications?.['난이도'] || '',
-          '출판사': foundProduct.specifications?.['출판사'] || 'Pretium Sound',
-          '언어': foundProduct.specifications?.['언어'] || '한국어',
-          '포함 자료': foundProduct.specifications?.['포함 자료'] || ''
+      // 클라이언트에서만 localStorage 접근
+      if (typeof window !== 'undefined') {
+        // 관리자가 추가한 상품들
+        const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
+        // 기본 상품 오버라이드
+        const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
+        
+        // 먼저 기본 상품에서 찾기
+        let foundProduct = products.find(p => p.id === productId)
+        
+        if (foundProduct) {
+          // 기본 상품이면 오버라이드 적용
+          foundProduct = { ...foundProduct, ...productOverrides[productId] }
+          setIsBasicProduct(true)
+        } else {
+          // 관리자가 추가한 상품에서 찾기
+          foundProduct = savedProducts.find(p => p.id === productId)
+          setIsBasicProduct(false)
         }
-      })
+
+        if (!foundProduct) {
+          setError('상품을 찾을 수 없습니다.')
+          return
+        }
+
+        setProduct(foundProduct)
+        
+        // 폼에 상품 데이터 설정
+        setProductForm({
+          title: foundProduct.title || '',
+          description: foundProduct.description || '',
+          detailedDescription: foundProduct.detailedDescription || foundProduct.description || '',
+          price: foundProduct.price ? foundProduct.price.replace(/[₩,]/g, '') : '',
+          icon: foundProduct.icon || '🎵',
+          image: foundProduct.image || null,
+          imagePreview: foundProduct.image || null,
+          category: foundProduct.category || '',
+          features: foundProduct.features?.length > 0 ? foundProduct.features : [''],
+          contents: foundProduct.contents?.length > 0 ? foundProduct.contents : [''],
+          specifications: {
+            '페이지 수': foundProduct.specifications?.['페이지 수'] || '',
+            '난이도': foundProduct.specifications?.['난이도'] || '',
+            '출판사': foundProduct.specifications?.['출판사'] || 'Pretium Sound',
+            '언어': foundProduct.specifications?.['언어'] || '한국어',
+            '포함 자료': foundProduct.specifications?.['포함 자료'] || ''
+          }
+        })
+      }
     } catch (err) {
       setError('상품 정보를 불러오는데 실패했습니다.')
     } finally {
       setIsLoadingProduct(false)
     }
+  }
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">페이지를 불러오는 중...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!isAdmin) {
@@ -292,32 +314,35 @@ export default function AdminProductEditPage() {
         )
       }
 
-      if (isBasicProduct) {
-        // 기본 상품 수정 - 오버라이드에 저장
-        const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-        productOverrides[product.id] = {
-          title: productForm.title.trim(),
-          description: productForm.description.trim(),
-          detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
-          price: formattedPrice,
-          icon: productForm.icon,
-          image: productForm.image,
-          category: productForm.category,
-          features: productForm.features.filter(f => f.trim()),
-          contents: productForm.contents.filter(c => c.trim()),
-          specifications: Object.fromEntries(
-            Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
-          )
-        }
-        localStorage.setItem('productOverrides', JSON.stringify(productOverrides))
-      } else {
-        // 관리자가 추가한 상품 수정
-        const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-        const productIndex = savedProducts.findIndex(p => p.id === product.id)
-        
-        if (productIndex !== -1) {
-          savedProducts[productIndex] = updatedProduct
-          localStorage.setItem('adminProducts', JSON.stringify(savedProducts))
+      // 클라이언트에서만 localStorage 사용
+      if (typeof window !== 'undefined') {
+        if (isBasicProduct) {
+          // 기본 상품 수정 - 오버라이드에 저장
+          const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
+          productOverrides[product.id] = {
+            title: productForm.title.trim(),
+            description: productForm.description.trim(),
+            detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
+            price: formattedPrice,
+            icon: productForm.icon,
+            image: productForm.image,
+            category: productForm.category,
+            features: productForm.features.filter(f => f.trim()),
+            contents: productForm.contents.filter(c => c.trim()),
+            specifications: Object.fromEntries(
+              Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
+            )
+          }
+          localStorage.setItem('productOverrides', JSON.stringify(productOverrides))
+        } else {
+          // 관리자가 추가한 상품 수정
+          const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
+          const productIndex = savedProducts.findIndex(p => p.id === product.id)
+          
+          if (productIndex !== -1) {
+            savedProducts[productIndex] = updatedProduct
+            localStorage.setItem('adminProducts', JSON.stringify(savedProducts))
+          }
         }
       }
 
@@ -418,8 +443,9 @@ export default function AdminProductEditPage() {
             </div>
           )}
 
-          {/* 폼 */}
+          {/* 나머지 폼 내용은 상품 추가 페이지와 동일 */}
           <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg overflow-hidden">
+            {/* 여기에 상품 추가 페이지의 폼 내용을 동일하게 포함 */}
             <div className="p-8 space-y-8">
               
               {/* 기본 정보 */}
@@ -507,7 +533,7 @@ export default function AdminProductEditPage() {
                 </div>
               </div>
 
-              {/* 이미지 업로드 섹션 */}
+              {/* 아이콘 선택 */}
               <div>
                 <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
                   <ImageIcon className="text-indigo-600" size={24} />

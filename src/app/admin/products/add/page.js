@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   ArrowLeft, 
@@ -24,6 +24,12 @@ export default function AdminProductAddPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [isMounted, setIsMounted] = useState(false)
+
+  // 클라이언트 마운트 감지
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   const [productForm, setProductForm] = useState({
     title: '',
@@ -31,8 +37,8 @@ export default function AdminProductAddPage() {
     detailedDescription: '',
     price: '',
     icon: '🎵',
-    image: null, // 새로 추가된 이미지 필드
-    imagePreview: null, // 이미지 미리보기용
+    image: null,
+    imagePreview: null,
     category: '',
     features: [''],
     contents: [''],
@@ -57,8 +63,25 @@ export default function AdminProductAddPage() {
     '초급', '초급 ~ 중급', '중급', '중급 ~ 고급', '고급', '전문가'
   ]
 
+  // 관리자 권한 체크
+  useEffect(() => {
+    if (isMounted && !isAdmin) {
+      router.push('/')
+    }
+  }, [isMounted, isAdmin, router])
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">페이지를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!isAdmin) {
-    router.push('/')
     return null
   }
 
@@ -213,20 +236,22 @@ export default function AdminProductAddPage() {
         detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
         price: formattedPrice,
         icon: productForm.icon,
-        image: productForm.image, // 이미지 추가
+        image: productForm.image,
         category: productForm.category,
         features: productForm.features.filter(f => f.trim()),
         contents: productForm.contents.filter(c => c.trim()),
         specifications: Object.fromEntries(
           Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
         ),
-        reviews: [] // 새 상품은 리뷰 없음
+        reviews: []
       }
 
-      // 로컬 스토리지에 저장 (실제로는 서버 API)
-      const existingProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-      existingProducts.push(newProduct)
-      localStorage.setItem('adminProducts', JSON.stringify(existingProducts))
+      // 클라이언트에서만 localStorage 사용
+      if (typeof window !== 'undefined') {
+        const existingProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
+        existingProducts.push(newProduct)
+        localStorage.setItem('adminProducts', JSON.stringify(existingProducts))
+      }
 
       setSuccess('상품이 성공적으로 추가되었습니다!')
       
