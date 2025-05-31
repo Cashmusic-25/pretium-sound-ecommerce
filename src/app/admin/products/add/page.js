@@ -19,16 +19,35 @@ import { useAuth } from '../../../contexts/AuthContext'  // 상대경로로 복�
 import { supabase } from '../../../../lib/supabase'  // 4개 - 맞음
 import Header from '../../../components/Header'           // 상대경로로 복구
 
-// 이미지 업로드 함수 (임시로 파일 내부에 정의)
 async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
   
   try {
+    // getSupabase 함수 import
+    const { getSupabase } = await import('../../../../lib/supabase')
+    console.log('✅ getSupabase 함수 로드 완료')
+    
+    const supabase = getSupabase()
+    console.log('🔧 Supabase 클라이언트:', supabase ? '연결됨' : '연결 실패')
+    
+    if (!supabase) {
+      throw new Error('Supabase 연결이 필요합니다')
+    }
+
     const fileExt = file.name.split('.').pop()
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
     
     console.log('📁 파일 경로:', filePath);
+    console.log('📦 버킷 이름: product-images');
+
+    // Storage 버킷 존재 여부 확인
+    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
+    console.log('🗂️ 사용 가능한 버킷들:', buckets?.map(b => b.name))
+    
+    if (bucketsError) {
+      console.error('버킷 목록 조회 실패:', bucketsError)
+    }
 
     const { data, error } = await supabase.storage
       .from('product-images')
@@ -39,6 +58,7 @@ async function uploadProductImage(file) {
 
     if (error) {
       console.error('🚨 이미지 업로드 실패:', error)
+      console.error('🚨 에러 상세:', JSON.stringify(error, null, 2))
       throw error
     }
 
@@ -54,6 +74,7 @@ async function uploadProductImage(file) {
     }
   } catch (error) {
     console.error('💥 이미지 업로드 에러:', error)
+    console.error('💥 에러 상세:', JSON.stringify(error, null, 2))
     throw error
   }
 }
@@ -307,52 +328,45 @@ const handleImageUpload = async (e) => {
     e.preventDefault()
     
     if (!validateForm()) return
-
+  
     setIsLoading(true)
     setError('')
-
+  
     try {
-      // 실제로는 서버 API 호출
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
       // 가격 포맷팅
       const priceNum = parseInt(productForm.price.replace(/[,]/g, ''))
-      const formattedPrice = `₩${priceNum.toLocaleString()}`
-
+  
       // 새 상품 데이터 생성
-      const newProduct = {
-        id: Date.now(), // 실제로는 서버에서 생성
+      const newProductData = {
         title: productForm.title.trim(),
         description: productForm.description.trim(),
         detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
-        price: formattedPrice,
+        price: priceNum,
         icon: productForm.icon,
         image: productForm.image,
+        imagePath: productForm.imagePath,
         category: productForm.category,
         features: productForm.features.filter(f => f.trim()),
         contents: productForm.contents.filter(c => c.trim()),
         specifications: Object.fromEntries(
           Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
-        ),
-        reviews: []
+        )
       }
-
-      // 클라이언트에서만 localStorage 사용
-      if (typeof window !== 'undefined') {
-        const existingProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-        existingProducts.push(newProduct)
-        localStorage.setItem('adminProducts', JSON.stringify(existingProducts))
-      }
-
+  
+      // @ 별칭 사용
+      const { createProduct } = await import('@/data/productHelpers')
+      const createdProduct = await createProduct(newProductData)
+  
+      console.log('✅ 상품 생성 성공:', createdProduct)
       setSuccess('상품이 성공적으로 추가되었습니다!')
       
-      // 2초 후 상품 목록 페이지로 이동
       setTimeout(() => {
         router.push('/admin/products')
       }, 2000)
-
+  
     } catch (err) {
-      setError('상품 추가 중 오류가 발생했습니다. 다시 시도해주세요.')
+      console.error('상품 추가 실패:', err)
+      setError('상품 추가 중 오류가 발생했습니다: ' + err.message)
     } finally {
       setIsLoading(false)
     }

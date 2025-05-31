@@ -119,62 +119,45 @@ export default function AdminProductEditPage() {
     }
   }, [isMounted, isAdmin, router, params?.id])
 
-  const loadProduct = () => {
+  const loadProduct = async () => {
     setIsLoadingProduct(true)
     
     try {
       const productId = parseInt(params.id)
       
-      // 클라이언트에서만 localStorage 접근
-      if (typeof window !== 'undefined') {
-        // 관리자가 추가한 상품들
-        const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-        // 기본 상품 오버라이드
-        const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-        
-        // 먼저 기본 상품에서 찾기
-        let foundProduct = products.find(p => p.id === productId)
-        
-        if (foundProduct) {
-          // 기본 상품이면 오버라이드 적용
-          foundProduct = { ...foundProduct, ...productOverrides[productId] }
-          setIsBasicProduct(true)
-        } else {
-          // 관리자가 추가한 상품에서 찾기
-          foundProduct = savedProducts.find(p => p.id === productId)
-          setIsBasicProduct(false)
-        }
-
-        if (!foundProduct) {
-          setError('상품을 찾을 수 없습니다.')
-          return
-        }
-
-        setProduct(foundProduct)
-        
-        // 폼에 상품 데이터 설정
-        setProductForm({
-          title: foundProduct.title || '',
-          description: foundProduct.description || '',
-          detailedDescription: foundProduct.detailedDescription || foundProduct.description || '',
-          price: foundProduct.price ? foundProduct.price.replace(/[₩,]/g, '') : '',
-          icon: foundProduct.icon || '🎵',
-          image: foundProduct.image || null,
-          imagePreview: foundProduct.image || null,
-          category: foundProduct.category || '',
-          features: foundProduct.features?.length > 0 ? foundProduct.features : [''],
-          contents: foundProduct.contents?.length > 0 ? foundProduct.contents : [''],
-          specifications: {
-            '페이지 수': foundProduct.specifications?.['페이지 수'] || '',
-            '난이도': foundProduct.specifications?.['난이도'] || '',
-            '출판사': foundProduct.specifications?.['출판사'] || 'Pretium Sound',
-            '언어': foundProduct.specifications?.['언어'] || '한국어',
-            '포함 자료': foundProduct.specifications?.['포함 자료'] || ''
-          }
-        })
+      // Supabase에서 상품 조회
+      const { getVisibleProductById } = await import('../../../../../data/productHelpers')
+      const foundProduct = await getVisibleProductById(productId)
+  
+      if (!foundProduct) {
+        setError('상품을 찾을 수 없습니다.')
+        return
       }
+  
+      setProduct(foundProduct)
+      
+      // 폼에 상품 데이터 설정
+      setProductForm({
+        title: foundProduct.title || '',
+        description: foundProduct.description || '',
+        detailedDescription: foundProduct.detailedDescription || foundProduct.description || '',
+        price: foundProduct.price ? foundProduct.price.replace(/[₩,]/g, '') : '',
+        icon: foundProduct.icon || '🎵',
+        image: foundProduct.image || null,
+        imagePreview: foundProduct.image || null,
+        category: foundProduct.category || '',
+        features: foundProduct.features?.length > 0 ? foundProduct.features : [''],
+        contents: foundProduct.contents?.length > 0 ? foundProduct.contents : [''],
+        specifications: {
+          '페이지 수': foundProduct.specifications?.['페이지 수'] || '',
+          '난이도': foundProduct.specifications?.['난이도'] || '',
+          '출판사': foundProduct.specifications?.['출판사'] || 'Pretium Sound',
+          '언어': foundProduct.specifications?.['언어'] || '한국어',
+          '포함 자료': foundProduct.specifications?.['포함 자료'] || ''
+        }
+      })
     } catch (err) {
-      setError('상품 정보를 불러오는데 실패했습니다.')
+      setError('상품 정보를 불러오는데 실패했습니다: ' + err.message)
     } finally {
       setIsLoadingProduct(false)
     }
@@ -353,27 +336,23 @@ const handleImageUpload = async (e) => {
     e.preventDefault()
     
     if (!validateForm()) return
-
+  
     setIsLoading(true)
     setError('')
-
+  
     try {
-      // 실제로는 서버 API 호출
-      await new Promise(resolve => setTimeout(resolve, 1500))
-
       // 가격 포맷팅
       const priceNum = parseInt(productForm.price.replace(/[,]/g, ''))
-      const formattedPrice = `₩${priceNum.toLocaleString()}`
-
+  
       // 업데이트된 상품 데이터 생성
-      const updatedProduct = {
-        ...product,
+      const updatedProductData = {
         title: productForm.title.trim(),
         description: productForm.description.trim(),
         detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
-        price: formattedPrice,
+        price: priceNum,
         icon: productForm.icon,
         image: productForm.image,
+        imagePath: productForm.imagePath,
         category: productForm.category,
         features: productForm.features.filter(f => f.trim()),
         contents: productForm.contents.filter(c => c.trim()),
@@ -381,48 +360,22 @@ const handleImageUpload = async (e) => {
           Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
         )
       }
-
-      // 클라이언트에서만 localStorage 사용
-      if (typeof window !== 'undefined') {
-        if (isBasicProduct) {
-          // 기본 상품 수정 - 오버라이드에 저장
-          const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-          productOverrides[product.id] = {
-            title: productForm.title.trim(),
-            description: productForm.description.trim(),
-            detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
-            price: formattedPrice,
-            icon: productForm.icon,
-            image: productForm.image,
-            category: productForm.category,
-            features: productForm.features.filter(f => f.trim()),
-            contents: productForm.contents.filter(c => c.trim()),
-            specifications: Object.fromEntries(
-              Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
-            )
-          }
-          localStorage.setItem('productOverrides', JSON.stringify(productOverrides))
-        } else {
-          // 관리자가 추가한 상품 수정
-          const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-          const productIndex = savedProducts.findIndex(p => p.id === product.id)
-          
-          if (productIndex !== -1) {
-            savedProducts[productIndex] = updatedProduct
-            localStorage.setItem('adminProducts', JSON.stringify(savedProducts))
-          }
-        }
-      }
-
+  
+      // Supabase에서 상품 수정
+      const { updateProduct } = await import('../../../../../data/productHelpers')
+      const updatedProduct = await updateProduct(product.id, updatedProductData)
+  
+      console.log('✅ 상품 수정 성공:', updatedProduct)
       setSuccess('상품이 성공적으로 수정되었습니다!')
       
       // 2초 후 상품 목록 페이지로 이동
       setTimeout(() => {
         router.push('/admin/products')
       }, 2000)
-
+  
     } catch (err) {
-      setError('상품 수정 중 오류가 발생했습니다. 다시 시도해주세요.')
+      console.error('상품 수정 실패:', err)
+      setError('상품 수정 중 오류가 발생했습니다: ' + err.message)
     } finally {
       setIsLoading(false)
     }

@@ -1,88 +1,225 @@
-// src/data/productHelpers.js - 순수 함수만 포함
+// src/data/productHelpers.js - Supabase 연동 버전
 
-import { supabase } from '../lib/supabase'
+import { getSupabase } from '../lib/supabase'
 import { products as staticProducts } from './products'
 
-// 정적 데이터에서 활성 상품 가져오기 (폴백용)
-function getStaticVisibleProducts() {
-  return staticProducts.filter(product => product.visible !== false)
-}
-
-// 정적 데이터에서 ID로 상품 찾기 (폴백용)
-function getStaticProductById(id) {
-  const numericId = parseInt(id)
-  if (isNaN(numericId)) return null
-  
-  return staticProducts.find(p => p.id === numericId && p.visible !== false) || null
-}
-
-// ✅ 누락된 함수 추가 - 가시적인 상품만 ID로 찾기
-export function getVisibleProductById(id) {
-  const numericId = parseInt(id)
-  if (isNaN(numericId)) return null
-  
-  // 브라우저 환경에서만 localStorage 사용
-  if (typeof window !== 'undefined') {
-    try {
-      // 로컬 스토리지에서 숨겨진 상품, 오버라이드, 추가 상품 가져오기
-      const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
-      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-      
-      // 숨겨진 상품인지 확인
-      if (hiddenProducts.includes(numericId)) {
-        return null
-      }
-      
-      // 추가된 상품에서 먼저 찾기
-      const savedProduct = savedProducts.find(p => p.id === numericId)
-      if (savedProduct) {
-        return savedProduct
-      }
-      
-      // 기본 상품에서 찾기
-      const baseProduct = staticProducts.find(p => p.id === numericId)
-      if (baseProduct) {
-        // 오버라이드 적용
-        return {
-          ...baseProduct,
-          ...productOverrides[numericId]
-        }
-      }
-    } catch (error) {
-      console.error('로컬 스토리지 읽기 실패:', error)
+// Supabase에서 모든 활성 상품 가져오기
+export async function getAllVisibleProducts() {
+  try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      console.warn('Supabase 연결 실패, 정적 데이터 사용')
+      return staticProducts
     }
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('상품 조회 실패:', error)
+      return staticProducts
+    }
+
+    // 가격을 원화 형식으로 변환
+    const formattedProducts = data.map(product => ({
+      ...product,
+      price: `₩${product.price.toLocaleString()}`,
+      image: product.image_url || null,
+      detailedDescription: product.detailed_description || product.description
+    }))
+
+    console.log('✅ Supabase에서 상품 조회 성공:', formattedProducts.length, '개')
+    return formattedProducts
+
+  } catch (error) {
+    console.error('상품 조회 중 오류:', error)
+    return staticProducts
   }
-  
-  // 폴백: 정적 데이터에서만 찾기
-  return getStaticProductById(id)
 }
 
-// 모든 가시적인 상품 가져오기
-export function getAllVisibleProducts() {
-  if (typeof window !== 'undefined') {
-    try {
-      const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
-      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-      
-      // 기본 상품에 오버라이드 적용하고 숨겨진 상품 제외
-      const visibleBaseProducts = staticProducts
-        .filter(product => !hiddenProducts.includes(product.id))
-        .map(product => ({
-          ...product,
-          ...productOverrides[product.id]
-        }))
-      
-      // 추가된 상품과 합치기
-      return [...visibleBaseProducts, ...savedProducts]
-    } catch (error) {
-      console.error('로컬 스토리지 읽기 실패:', error)
+// ID로 상품 찾기
+export async function getVisibleProductById(id) {
+  try {
+    const numericId = parseInt(id)
+    if (isNaN(numericId)) return null
+
+    const supabase = await getSupabase()
+    if (!supabase) {
+      console.warn('Supabase 연결 실패, 정적 데이터 사용')
+      return staticProducts.find(p => p.id === numericId) || null
     }
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', numericId)
+      .eq('is_active', true)
+      .single()
+
+    if (error) {
+      console.error('상품 조회 실패:', error)
+      return staticProducts.find(p => p.id === numericId) || null
+    }
+
+    // 가격을 원화 형식으로 변환
+    const formattedProduct = {
+      ...data,
+      price: `₩${data.price.toLocaleString()}`,
+      image: data.image_url || null,
+      detailedDescription: data.detailed_description || data.description
+    }
+
+    console.log('✅ Supabase에서 상품 조회 성공:', formattedProduct.title)
+    return formattedProduct
+
+  } catch (error) {
+    console.error('상품 조회 중 오류:', error)
+    const numericId = parseInt(id)
+    return staticProducts.find(p => p.id === numericId) || null
   }
-  
-  // 폴백: 정적 데이터만 반환
-  return getStaticVisibleProducts()
+}
+
+// 상품 생성
+export async function createProduct(productData) {
+  try {
+    console.log('🔧 createProduct 시작 - 입력 데이터:', productData)
+    
+    const supabase = await getSupabase()
+    if (!supabase) {
+      throw new Error('Supabase 연결이 필요합니다')
+    }
+
+    // 가격을 숫자로 변환
+    const priceNumber = typeof productData.price === 'string' 
+      ? parseInt(productData.price.replace(/[₩,]/g, ''))
+      : productData.price
+
+    const insertData = {
+      title: productData.title,
+      description: productData.description,
+      detailed_description: productData.detailedDescription || productData.description,
+      price: priceNumber,
+      icon: productData.icon || '🎵',
+      image_url: productData.image,
+      // image_path: productData.imagePath,  ← 이 줄 제거
+      category: productData.category,
+      features: productData.features || [],
+      contents: productData.contents || [],
+      specifications: productData.specifications || {},
+      is_active: true
+    }
+
+    console.log('💾 상품 저장 중:', insertData.title)
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert([insertData])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('상품 생성 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 상품 생성 성공:', data.title)
+
+    return {
+      ...data,
+      price: `₩${data.price.toLocaleString()}`,
+      image: data.image_url,
+      detailedDescription: data.detailed_description
+    }
+  } catch (error) {
+    console.error('상품 생성 중 오류:', error)
+    throw error
+  }
+}
+
+// 상품 수정
+export async function updateProduct(productId, productData) {
+  try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      throw new Error('Supabase 연결이 필요합니다')
+    }
+
+    // 가격을 숫자로 변환
+    const priceNumber = typeof productData.price === 'string' 
+      ? parseInt(productData.price.replace(/[₩,]/g, ''))
+      : productData.price
+
+    const updateData = {
+      title: productData.title,
+      description: productData.description,
+      detailed_description: productData.detailedDescription || productData.description,
+      price: priceNumber,
+      icon: productData.icon || '🎵',
+      image_url: productData.image,
+      category: productData.category,
+      features: productData.features || [],
+      contents: productData.contents || [],
+      specifications: productData.specifications || {},
+      updated_at: new Date().toISOString()
+    }
+
+    console.log('🔄 상품 수정 중:', updateData.title)
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(updateData)
+      .eq('id', productId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('상품 수정 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 상품 수정 성공:', data.title)
+
+    return {
+      ...data,
+      price: `₩${data.price.toLocaleString()}`,
+      image: data.image_url,
+      detailedDescription: data.detailed_description
+    }
+  } catch (error) {
+    console.error('상품 수정 중 오류:', error)
+    throw error
+  }
+}
+
+// 상품 삭제 (비활성화)
+export async function deleteProduct(productId) {
+  try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      throw new Error('Supabase 연결이 필요합니다')
+    }
+
+    console.log('🗑️ 상품 삭제 중:', productId)
+
+    const { error } = await supabase
+      .from('products')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', productId)
+
+    if (error) {
+      console.error('상품 삭제 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 상품 삭제 성공:', productId)
+    return true
+  } catch (error) {
+    console.error('상품 삭제 중 오류:', error)
+    throw error
+  }
 }
 
 // 이미지를 Supabase Storage에 업로드
@@ -90,6 +227,11 @@ export async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
   
   try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      throw new Error('Supabase 연결이 필요합니다')
+    }
+
     const fileExt = file.name.split('.').pop()
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
@@ -124,54 +266,58 @@ export async function uploadProductImage(file) {
   }
 }
 
-// 상품 생성
-export async function createProduct(productData) {
-  try {
-    const priceNumber = typeof productData.price === 'string' 
-      ? parseInt(productData.price.replace(/[₩,]/g, ''))
-      : productData.price
-
-    const { data, error } = await supabase
-      .from('products')
-      .insert([
-        {
-          ...productData,
-          price: priceNumber,
-          is_active: true,
-          created_at: new Date().toISOString(),
-          image: productData.image
-        }
-      ])
-      .select()
-      .single()
-
-    if (error) throw error
-
-    return {
-      ...data,
-      price: data.price ? `₩${data.price.toLocaleString()}` : '₩0'
-    }
-  } catch (error) {
-    console.error('Error creating product:', error)
-    throw error
-  }
-}
-
 // 매출 통계
 export async function getSalesStats() {
   try {
-    const totalSales = 15420000
-    const monthlySales = 2340000
-    const totalOrders = 234
-    const monthlyOrders = 45
+    const supabase = await getSupabase()
+    if (!supabase) {
+      // 더미 데이터 반환
+      return {
+        totalSales: 15420000,
+        monthlySales: 2340000,
+        totalOrders: 234,
+        monthlyOrders: 45,
+        salesGrowth: 12.5,
+        orderGrowth: 8.3
+      }
+    }
+
+    const { data: orders, error } = await supabase
+      .from('orders')
+      .select('total_amount, created_at')
+
+    if (error) {
+      console.warn('매출 통계 조회 실패:', error)
+      return {
+        totalSales: 0,
+        monthlySales: 0,
+        totalOrders: 0,
+        monthlyOrders: 0,
+        salesGrowth: 0,
+        orderGrowth: 0
+      }
+    }
+
+    const totalSales = orders.reduce((sum, order) => sum + order.total_amount, 0)
+    const totalOrders = orders.length
+
+    // 이번 달 데이터
+    const thisMonth = new Date()
+    thisMonth.setDate(1)
+    
+    const monthlyOrders = orders.filter(order => 
+      new Date(order.created_at) >= thisMonth
+    )
+    
+    const monthlySales = monthlyOrders.reduce((sum, order) => sum + order.total_amount, 0)
 
     return {
       totalSales,
       monthlySales,
       totalOrders,
-      monthlyOrders,
-      salesGrowth: 12.5,
-      orderGrowth: 8.3
+      monthlyOrders: monthlyOrders.length,
+      salesGrowth: 12.5, // 임시값
+      orderGrowth: 8.3    // 임시값
     }
   } catch (error) {
     console.error('매출 통계 조회 실패:', error)
@@ -189,16 +335,25 @@ export async function getSalesStats() {
 // 사용자 통계
 export async function getUserStats() {
   try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      return {
+        totalUsers: 156,
+        monthlyUsers: 23,
+        userGrowth: 15.2
+      }
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('id, created_at')
 
     if (error) {
-      console.warn('사용자 통계 조회 실패, 더미 데이터 사용:', error)
+      console.warn('사용자 통계 조회 실패:', error)
       return {
-        totalUsers: 156,
-        monthlyUsers: 23,
-        userGrowth: 15.2
+        totalUsers: 0,
+        monthlyUsers: 0,
+        userGrowth: 0
       }
     }
 
@@ -210,29 +365,17 @@ export async function getUserStats() {
       new Date(user.created_at) >= thisMonth
     ).length || 0
 
-    const lastMonth = new Date(thisMonth)
-    lastMonth.setMonth(lastMonth.getMonth() - 1)
-    
-    const lastMonthUsers = data?.filter(user => {
-      const createdDate = new Date(user.created_at)
-      return createdDate >= lastMonth && createdDate < thisMonth
-    }).length || 0
-
-    const userGrowth = lastMonthUsers > 0 
-      ? ((monthlyUsers - lastMonthUsers) / lastMonthUsers) * 100 
-      : 0
-
     return {
       totalUsers,
       monthlyUsers,
-      userGrowth: Math.round(userGrowth * 10) / 10
+      userGrowth: 15.2 // 임시값
     }
   } catch (error) {
     console.error('사용자 통계 조회 실패:', error)
     return {
-      totalUsers: 156,
-      monthlyUsers: 23,
-      userGrowth: 15.2
+      totalUsers: 0,
+      monthlyUsers: 0,
+      userGrowth: 0
     }
   }
 }
@@ -240,19 +383,29 @@ export async function getUserStats() {
 // 상품 통계  
 export async function getProductStats() {
   try {
+    const supabase = await getSupabase()
+    if (!supabase) {
+      return {
+        totalProducts: 6,
+        activeProducts: 6,
+        inactiveProducts: 0,
+        averagePrice: 45000,
+        totalValue: 270000
+      }
+    }
+
     const { data, error } = await supabase
       .from('products')
       .select('id, is_active, price, created_at')
 
     if (error) {
-      console.warn('상품 통계 조회 실패, 정적 데이터 사용:', error)
-      const staticProducts = getStaticVisibleProducts()
+      console.warn('상품 통계 조회 실패:', error)
       return {
-        totalProducts: staticProducts.length,
-        activeProducts: staticProducts.length,
+        totalProducts: 0,
+        activeProducts: 0,
         inactiveProducts: 0,
-        averagePrice: 45000,
-        totalValue: staticProducts.length * 45000
+        averagePrice: 0,
+        totalValue: 0
       }
     }
 
@@ -271,13 +424,12 @@ export async function getProductStats() {
     }
   } catch (error) {
     console.error('상품 통계 조회 실패:', error)
-    const staticProducts = getStaticVisibleProducts()
     return {
-      totalProducts: staticProducts.length,
-      activeProducts: staticProducts.length,
+      totalProducts: 0,
+      activeProducts: 0,
       inactiveProducts: 0,
-      averagePrice: 45000,
-      totalValue: staticProducts.length * 45000
+      averagePrice: 0,
+      totalValue: 0
     }
   }
 }
@@ -285,17 +437,27 @@ export async function getProductStats() {
 // 리뷰 통계
 export async function getReviewStats() {
   try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .select('id, rating, created_at')
-
-    if (error) {
-      console.warn('리뷰 통계 조회 실패, 더미 데이터 사용:', error)
+    const supabase = await getSupabase()
+    if (!supabase) {
       return {
         totalReviews: 89,
         monthlyReviews: 12,
         averageRating: 4.3,
         reviewGrowth: 25.5
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('id, rating, created_at')
+
+    if (error) {
+      console.warn('리뷰 통계 조회 실패:', error)
+      return {
+        totalReviews: 0,
+        monthlyReviews: 0,
+        averageRating: 0,
+        reviewGrowth: 0
       }
     }
 
@@ -311,31 +473,19 @@ export async function getReviewStats() {
       ? data.reduce((sum, review) => sum + (review.rating || 0), 0) / totalReviews 
       : 0
 
-    const lastMonth = new Date(thisMonth)
-    lastMonth.setMonth(lastMonth.getMonth() - 1)
-    
-    const lastMonthReviews = data?.filter(review => {
-      const createdDate = new Date(review.created_at)
-      return createdDate >= lastMonth && createdDate < thisMonth
-    }).length || 0
-
-    const reviewGrowth = lastMonthReviews > 0 
-      ? ((monthlyReviews - lastMonthReviews) / lastMonthReviews) * 100 
-      : 0
-
     return {
       totalReviews,
       monthlyReviews,
       averageRating: Math.round(averageRating * 10) / 10,
-      reviewGrowth: Math.round(reviewGrowth * 10) / 10
+      reviewGrowth: 25.5 // 임시값
     }
   } catch (error) {
     console.error('리뷰 통계 조회 실패:', error)
     return {
-      totalReviews: 89,
-      monthlyReviews: 12,
-      averageRating: 4.3,
-      reviewGrowth: 25.5
+      totalReviews: 0,
+      monthlyReviews: 0,
+      averageRating: 0,
+      reviewGrowth: 0
     }
   }
 }
@@ -343,32 +493,39 @@ export async function getReviewStats() {
 // 최근 주문 목록
 export async function getRecentOrders(limit = 5) {
   try {
-    return [
-      {
-        id: 1,
-        customer: '김음악',
-        product: '재즈 피아노 완전정복',
-        amount: 45000,
-        status: '완료',
-        date: new Date().toISOString()
-      },
-      {
-        id: 2,
-        customer: '이기타',
-        product: '어쿠스틱 기타 바이블',
-        amount: 38000,
-        status: '배송중',
-        date: new Date(Date.now() - 86400000).toISOString()
-      },
-      {
-        id: 3,
-        customer: '박보컬',
-        product: '보컬 테크닉 마스터',
-        amount: 42000,
-        status: '완료',
-        date: new Date(Date.now() - 172800000).toISOString()
-      }
-    ]
+    const supabase = await getSupabase()
+    if (!supabase) {
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        order_number,
+        total_amount,
+        status,
+        created_at,
+        shipping_info,
+        profiles!inner(name, email)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.warn('최근 주문 조회 실패:', error)
+      return []
+    }
+
+    return data.map(order => ({
+      id: order.id,
+      orderNumber: order.order_number,
+      customer: order.profiles.name || '알 수 없음',
+      customerEmail: order.profiles.email,
+      amount: order.total_amount,
+      status: order.status,
+      date: order.created_at
+    }))
   } catch (error) {
     console.error('최근 주문 조회 실패:', error)
     return []
@@ -378,7 +535,7 @@ export async function getRecentOrders(limit = 5) {
 // 인기 상품 목록
 export async function getPopularProducts(limit = 5) {
   try {
-    const products = getStaticVisibleProducts()
+    const products = await getAllVisibleProducts()
     return products.slice(0, limit).map(product => ({
       ...product,
       soldCount: Math.floor(Math.random() * 100) + 20
