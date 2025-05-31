@@ -16,6 +16,75 @@ function getStaticProductById(id) {
   return staticProducts.find(p => p.id === numericId && p.visible !== false) || null
 }
 
+// ✅ 누락된 함수 추가 - 가시적인 상품만 ID로 찾기
+export function getVisibleProductById(id) {
+  const numericId = parseInt(id)
+  if (isNaN(numericId)) return null
+  
+  // 브라우저 환경에서만 localStorage 사용
+  if (typeof window !== 'undefined') {
+    try {
+      // 로컬 스토리지에서 숨겨진 상품, 오버라이드, 추가 상품 가져오기
+      const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
+      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
+      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
+      
+      // 숨겨진 상품인지 확인
+      if (hiddenProducts.includes(numericId)) {
+        return null
+      }
+      
+      // 추가된 상품에서 먼저 찾기
+      const savedProduct = savedProducts.find(p => p.id === numericId)
+      if (savedProduct) {
+        return savedProduct
+      }
+      
+      // 기본 상품에서 찾기
+      const baseProduct = staticProducts.find(p => p.id === numericId)
+      if (baseProduct) {
+        // 오버라이드 적용
+        return {
+          ...baseProduct,
+          ...productOverrides[numericId]
+        }
+      }
+    } catch (error) {
+      console.error('로컬 스토리지 읽기 실패:', error)
+    }
+  }
+  
+  // 폴백: 정적 데이터에서만 찾기
+  return getStaticProductById(id)
+}
+
+// 모든 가시적인 상품 가져오기
+export function getAllVisibleProducts() {
+  if (typeof window !== 'undefined') {
+    try {
+      const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
+      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
+      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
+      
+      // 기본 상품에 오버라이드 적용하고 숨겨진 상품 제외
+      const visibleBaseProducts = staticProducts
+        .filter(product => !hiddenProducts.includes(product.id))
+        .map(product => ({
+          ...product,
+          ...productOverrides[product.id]
+        }))
+      
+      // 추가된 상품과 합치기
+      return [...visibleBaseProducts, ...savedProducts]
+    } catch (error) {
+      console.error('로컬 스토리지 읽기 실패:', error)
+    }
+  }
+  
+  // 폴백: 정적 데이터만 반환
+  return getStaticVisibleProducts()
+}
+
 // 이미지를 Supabase Storage에 업로드
 export async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
