@@ -19,13 +19,64 @@ export default function OrdersPage() {
       router.push('/')
       return
     }
-
-    // 사용자의 주문 내역 불러오기
-    const userOrders = user?.orders || []
-    // 최신 주문부터 표시
-    const sortedOrders = userOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    setOrders(sortedOrders)
-    setIsLoading(false)
+  
+    // Supabase에서 사용자의 주문 내역 불러오기
+    const loadUserOrders = async () => {
+      try {
+        setIsLoading(true)
+        
+        const { getSupabase } = await import('@/lib/supabase')
+        const supabase = getSupabase()
+        
+        if (!supabase || !user) {
+          console.warn('Supabase 또는 user 없음')
+          setOrders([])
+          return
+        }
+  
+        console.log('📦 사용자 주문 조회 시작:', user.id)
+  
+        // 현재 사용자의 주문만 조회
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+  
+        if (error) {
+          console.error('주문 조회 실패:', error)
+          setOrders([])
+          return
+        }
+  
+        console.log('✅ 주문 조회 성공:', data.length, '개')
+  
+        // Supabase 데이터를 기존 형식으로 변환
+        const formattedOrders = data.map(order => ({
+          id: order.id,
+          orderNumber: `PS${order.id}`, // 임시 주문번호 (나중에 실제 컬럼 추가 가능)
+          userId: order.user_id,
+          items: order.items || [],
+          totalAmount: order.total_amount,
+          status: order.status,
+          createdAt: order.created_at,
+          shipping: order.shipping_address,
+          payment: {
+            method: 'card' // 임시값 (나중에 실제 결제 정보 추가 가능)
+          }
+        }))
+  
+        setOrders(formattedOrders)
+        
+      } catch (error) {
+        console.error('주문 로드 중 오류:', error)
+        setOrders([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  
+    loadUserOrders()
   }, [isAuthenticated, user, router])
 
   const formatPrice = (price) => {

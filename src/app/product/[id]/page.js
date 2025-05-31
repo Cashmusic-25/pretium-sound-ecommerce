@@ -28,6 +28,8 @@ export default function ProductPage({ params }) {
   const [editingReview, setEditingReview] = useState(null)
   const [reviewFilter, setReviewFilter] = useState('all')
   const [reviewSort, setReviewSort] = useState('newest')
+  const [isPurchased, setIsPurchased] = useState(false)
+  const [hasReviewed, setHasReviewed] = useState(false)
 
   useEffect(() => {
     if (resolvedParams?.id) {
@@ -37,9 +39,26 @@ export default function ProductPage({ params }) {
 
   useEffect(() => {
     if (product) {
-      loadReviews()
+      loadReviews() // async 함수이지만 await 없이 호출
     }
   }, [product])
+
+  // useEffect 추가
+  useEffect(() => {
+    const checkPurchaseStatus = async () => {
+      if (product && user && hasPurchasedProduct) {
+        const purchased = await hasPurchasedProduct(product.id)
+        setIsPurchased(purchased)
+        
+        if (hasReviewedProduct) {
+          const reviewed = await hasReviewedProduct(product.id)
+          setHasReviewed(reviewed)
+        }
+      }
+    }
+    
+    checkPurchaseStatus()
+  }, [product, user, hasPurchasedProduct, hasReviewedProduct])
 
   const loadProduct = async () => {  // ✅ async 추가
     setLoading(true)
@@ -60,24 +79,85 @@ export default function ProductPage({ params }) {
     }
   }
 
-  const loadReviews = () => {
-    if (typeof window !== 'undefined') {
-      try {
+  const loadReviews = async () => {
+    if (!product) return
+  
+    try {
+      const { getSupabase } = await import('@/lib/supabase')
+      const supabase = getSupabase()
+      
+      if (!supabase) {
+        console.warn('Supabase 연결 실패, localStorage 사용')
+        // 백업: localStorage에서 리뷰 로드
         const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
         const productReviews = allReviews.filter(review => review.productId === product.id)
-        
-        // 기본 상품의 리뷰도 포함
         const defaultReviews = product.reviews || []
-        
         const combinedReviews = [...defaultReviews, ...productReviews]
         setReviews(combinedReviews)
-      } catch (error) {
-        console.warn('리뷰 로드 실패:', error)
-        setReviews(product.reviews || [])
+        return
       }
+  
+      console.log('📝 리뷰 로드 시작:', product.id)
+  
+      // Supabase에서 해당 상품의 리뷰 조회 (사용자 정보 포함)
+      const { data, error } = await supabase
+        .from('reviews')
+        .select(`
+          *,
+          users (
+            name,
+            email
+          )
+        `)
+        .eq('product_id', product.id)
+        .order('created_at', { ascending: false })
+  
+      if (error) {
+        console.error('리뷰 조회 실패:', error)
+        // 에러 시 localStorage 백업 사용
+        const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+        const productReviews = allReviews.filter(review => review.productId === product.id)
+        setReviews(productReviews)
+        return
+      }
+  
+      console.log('✅ 리뷰 조회 성공:', data.length, '개')
+  
+      // Supabase 데이터를 기존 형식으로 변환
+      const formattedReviews = data.map(review => ({
+        id: review.id,
+        userId: review.user_id,
+        user_id: review.user_id,
+        userName: review.users?.name || '사용자',
+        user_name: review.users?.name || '사용자',
+        productId: review.product_id,
+        product_id: review.product_id,
+        rating: review.rating,
+        title: review.title,
+        content: review.content,
+        photos: review.photos || [],
+        verified: review.verified || true,
+        helpful_count: review.helpful_count || 0,
+        helpful: review.helpful_count || 0,
+        helpfulUsers: [],
+        createdAt: review.created_at,
+        created_at: review.created_at,
+        updatedAt: review.updated_at,
+        updated_at: review.updated_at
+      }))
+  
+      // 기존 정적 리뷰도 포함 (있다면)
+      const defaultReviews = product.reviews || []
+      const allReviews = [...formattedReviews, ...defaultReviews]
+      
+      setReviews(allReviews)
+  
+    } catch (error) {
+      console.error('리뷰 로드 중 오류:', error)
+      // 최종 백업: 기존 상품 리뷰만 사용
+      setReviews(product.reviews || [])
     }
   }
-
   const handleAddToCart = () => {
     if (!product) return
     
@@ -97,7 +177,7 @@ export default function ProductPage({ params }) {
       alert('장바구니 추가에 실패했습니다.')
     }
   }
-
+  
   const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
       alert('로그인이 필요한 서비스입니다.')
@@ -120,10 +200,13 @@ export default function ProductPage({ params }) {
         await addReview({
           ...reviewData,
           product_id: product.id,
-          productId: product.id // localStorage용 호환성
+          productId: product.id
         })
       }
-      loadReviews()
+      
+      // 리뷰 목록 새로고침 (Supabase에서 최신 데이터 가져오기)
+      await loadReviews()
+      
       setIsReviewModalOpen(false)
       setEditingReview(null)
       alert(isEdit ? '리뷰가 수정되었습니다!' : '리뷰가 작성되었습니다!')
@@ -143,7 +226,10 @@ export default function ProductPage({ params }) {
     
     try {
       await deleteReview(reviewId)
-      loadReviews()
+      
+      // 리뷰 목록 새로고침
+      await loadReviews()
+      
       alert('리뷰가 삭제되었습니다.')
     } catch (error) {
       console.error('리뷰 삭제 실패:', error)
@@ -266,8 +352,6 @@ export default function ProductPage({ params }) {
   }
 
   const isInWishlist = user?.wishlist?.includes(product.id) || false
-  const isPurchased = hasPurchasedProduct && hasPurchasedProduct(product.id)
-  const hasReviewed = hasReviewedProduct && hasReviewedProduct(product.id)
   const ratingStats = getRatingStats()
   const filteredReviews = getFilteredReviews()
 

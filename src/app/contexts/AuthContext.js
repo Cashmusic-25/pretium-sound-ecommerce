@@ -1,6 +1,6 @@
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { getSupabase, resetSupabaseClient } from '../../lib/supabase'
+import { getSupabase } from '../../lib/supabase'
 
 const AuthContext = createContext()
 
@@ -11,6 +11,275 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null)
   const [retryCount, setRetryCount] = useState(0)
   const [supabaseReady, setSupabaseReady] = useState(false)
+
+
+      // 사용자의 구매 여부 확인 (Supabase 기반)
+  const hasPurchasedProduct = async (productId) => {
+    if (!user) return false
+
+    try {
+      const supabaseClient = await getSupabase()
+      if (!supabaseClient) {
+        console.warn('Supabase 연결 실패, localStorage 사용')
+        // 백업: localStorage에서 확인
+        const orders = JSON.parse(localStorage.getItem('allOrders') || '[]')
+        return orders.some(order => 
+          order.userId === user.id && 
+          order.items?.some(item => item.id === productId) &&
+          order.status === 'delivered' // 배송완료된 주문만
+        )
+      }
+
+      console.log('🔍 구매 여부 확인:', user.id, productId)
+
+      // Supabase에서 배송완료된 주문 중에 해당 상품이 있는지 확인
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .select('items')
+        .eq('user_id', user.id)
+        .eq('status', 'delivered') // 배송완료된 주문만
+
+      if (error) {
+        console.error('구매 여부 확인 실패:', error)
+        return false
+      }
+
+      // 주문 아이템들 중에 해당 상품이 있는지 확인
+      const hasPurchased = data.some(order => 
+        order.items?.some(item => item.id === productId || item.id === parseInt(productId))
+      )
+
+      console.log('✅ 구매 여부 결과:', hasPurchased)
+      return hasPurchased
+
+    } catch (error) {
+      console.error('구매 여부 확인 중 오류:', error)
+      return false
+    }
+  }
+
+  // 사용자의 리뷰 작성 여부 확인 (Supabase 기반)
+  const hasReviewedProduct = async (productId) => {
+    if (!user) return false
+
+    try {
+      const supabaseClient = await getSupabase()
+      if (!supabaseClient) {
+        // 백업: localStorage에서 확인
+        const reviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+        return reviews.some(review => 
+          review.userId === user.id && 
+          review.productId === productId
+        )
+      }
+
+      const { data, error } = await supabaseClient
+        .from('reviews')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('product_id', productId)
+
+      if (error) {
+        console.error('리뷰 확인 실패:', error)
+        return false
+      }
+
+      return data.length > 0
+
+    } catch (error) {
+      console.error('리뷰 확인 중 오류:', error)
+      return false
+    }
+  }
+
+
+  // AuthProvider 컴포넌트 내부에 추가할 리뷰 관련 함수들
+
+// addReview 함수를 이것으로 교체
+const addReview = async (reviewData) => {
+  if (!user) {
+    throw new Error('로그인이 필요합니다.')
+  }
+
+  try {
+    const supabaseClient = await getSupabase()
+    
+    if (!supabaseClient) {
+      // 백업: localStorage에 저장
+      const reviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+      const newReview = {
+        ...reviewData,
+        id: Date.now(),
+        user_id: user.id,
+        created_at: new Date().toISOString()
+      }
+      reviews.push(newReview)
+      localStorage.setItem('reviews', JSON.stringify(reviews))
+      return newReview
+    }
+
+    console.log('💬 리뷰 저장 시작:', reviewData)
+
+    // Supabase에 리뷰 저장 (photos 포함)
+    const supabaseReviewData = {
+      user_id: user.id,
+      product_id: reviewData.product_id,
+      rating: reviewData.rating,
+      title: reviewData.title || '',
+      content: reviewData.content,
+      photos: reviewData.photos || [],  // 사진 데이터 추가
+      verified: true
+    }
+
+    const { data, error } = await supabaseClient
+      .from('reviews')
+      .insert([supabaseReviewData])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('리뷰 저장 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 리뷰 저장 성공 (사진 포함):', data)
+
+    // 백업용으로 localStorage에도 저장
+    try {
+      const reviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+      reviews.push({
+        ...reviewData,
+        id: data.id,
+        supabaseId: data.id
+      })
+      localStorage.setItem('reviews', JSON.stringify(reviews))
+    } catch (storageError) {
+      console.warn('localStorage 저장 실패:', storageError)
+    }
+
+    return data
+
+  } catch (error) {
+    console.error('리뷰 추가 실패:', error)
+    throw error
+  }
+}
+
+// updateReview 함수에서 photos 업데이트 추가
+const updateReview = async (reviewId, reviewData) => {
+  if (!user) {
+    throw new Error('로그인이 필요합니다.')
+  }
+
+  try {
+    const supabaseClient = await getSupabase()
+    
+    if (!supabaseClient) {
+      // localStorage 백업 로직...
+      return reviewData
+    }
+
+    const { data, error } = await supabaseClient
+      .from('reviews')
+      .update({
+        rating: reviewData.rating,
+        title: reviewData.title || '',
+        content: reviewData.content,
+        photos: reviewData.photos || [],  // 사진 업데이트 추가
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', reviewId)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('리뷰 수정 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 리뷰 수정 성공 (사진 포함):', data)
+    return data
+
+  } catch (error) {
+    console.error('리뷰 수정 실패:', error)
+    throw error
+  }
+}
+
+// 리뷰 삭제 함수
+const deleteReview = async (reviewId) => {
+  if (!user) {
+    throw new Error('로그인이 필요합니다.')
+  }
+
+  try {
+    const supabaseClient = await getSupabase()
+    
+    if (!supabaseClient) {
+      // 백업: localStorage에서 삭제
+      const reviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+      const filteredReviews = reviews.filter(review => review.id !== reviewId)
+      localStorage.setItem('reviews', JSON.stringify(filteredReviews))
+      return true
+    }
+
+    const { error } = await supabaseClient
+      .from('reviews')
+      .delete()
+      .eq('id', reviewId)
+      .eq('user_id', user.id) // 본인 리뷰만 삭제 가능
+
+    if (error) {
+      console.error('리뷰 삭제 실패:', error)
+      throw error
+    }
+
+    console.log('✅ 리뷰 삭제 성공')
+    return true
+
+  } catch (error) {
+    console.error('리뷰 삭제 실패:', error)
+    throw error
+  }
+}
+
+// 리뷰 도움됨 토글 함수
+const toggleReviewHelpful = async (reviewId) => {
+  if (!user) {
+    throw new Error('로그인이 필요합니다.')
+  }
+
+  try {
+    // 임시로 localStorage 사용 (나중에 Supabase 연동 가능)
+    const reviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+    const updatedReviews = reviews.map(review => {
+      if (review.id === reviewId) {
+        const helpfulUsers = review.helpfulUsers || []
+        const isHelpful = helpfulUsers.includes(user.id)
+        
+        return {
+          ...review,
+          helpfulUsers: isHelpful 
+            ? helpfulUsers.filter(id => id !== user.id)
+            : [...helpfulUsers, user.id],
+          helpful_count: isHelpful 
+            ? (review.helpful_count || 0) - 1
+            : (review.helpful_count || 0) + 1
+        }
+      }
+      return review
+    })
+    
+    localStorage.setItem('reviews', JSON.stringify(updatedReviews))
+    return true
+
+  } catch (error) {
+    console.error('리뷰 도움됨 토글 실패:', error)
+    throw error
+  }
+}
+
 
   const initializeAuth = useCallback(async () => {
     // 서버 사이드에서는 실행하지 않음
@@ -72,7 +341,7 @@ export function AuthProvider({ children }) {
       if (retryCount < 2) {
         console.log('🔄 5초 후 재시도...')
         setTimeout(() => {
-          resetSupabaseClient() // 클라이언트 리셋
+      //    resetSupabaseClient() // 클라이언트 리셋
           setRetryCount(prev => prev + 1)
         }, 5000)
       } else {
@@ -216,7 +485,70 @@ export function AuthProvider({ children }) {
       throw error
     }
   }
+  const addOrder = async (orderData) => {
+    console.log('🔧 addOrder 호출됨!')
+    
+    const supabaseClient = await getSupabase()
+    console.log('🔧 supabaseClient 상태:', !!supabaseClient)
+    console.log('🔧 user 상태:', !!user, user?.id)
+    
+    if (!supabaseClient || !user) {
+      console.error('❌ supabase 또는 user 없음')
+      throw new Error('로그인이 필요합니다.')
+    }
 
+    try {
+      console.log('💾 주문 저장 시작:', orderData)
+
+      const supabaseOrderData = {
+        user_id: user.id,
+        items: orderData.items,
+        total_amount: orderData.totalAmount,
+        status: orderData.status || 'pending',
+        shipping_address: {
+          name: orderData.shipping.name,
+          phone: orderData.shipping.phone,
+          email: orderData.shipping.email,
+          address: orderData.shipping.address,
+          detailAddress: orderData.shipping.detailAddress,
+          zipCode: orderData.shipping.zipCode,
+          memo: orderData.shipping.memo
+        }
+      }
+
+      console.log('📦 Supabase 저장 데이터:', supabaseOrderData)
+      console.log('📤 Supabase insert 호출 직전')
+      
+      const { data, error } = await supabaseClient
+        .from('orders')
+        .insert([supabaseOrderData])
+        .select()
+        .single()
+      
+      console.log('📥 Supabase 응답 - data:', data)
+      console.log('📥 Supabase 응답 - error:', error)
+
+      if (error) {
+        console.error('🚨 주문 저장 실패:', error)
+        throw error
+      }
+
+      console.log('✅ 주문 저장 성공:', data)
+
+      try {
+        const existingOrders = JSON.parse(localStorage.getItem('allOrders') || '[]')
+        const updatedOrders = [...existingOrders, { ...orderData, supabaseId: data.id }]
+        localStorage.setItem('allOrders', JSON.stringify(updatedOrders))
+      } catch (storageError) {
+        console.warn('localStorage 저장 실패:', storageError)
+      }
+
+      return data
+    } catch (error) {
+      console.error('💥 주문 추가 실패 상세:', error, error.message, error.code)
+      throw error
+    }
+  }
   // 수동 재시도 함수
   const retry = useCallback(() => {
     setRetryCount(0)
@@ -292,6 +624,13 @@ export function AuthProvider({ children }) {
     getAllReviews,
     updateOrderStatus,
     adminDeleteReview,
+    addOrder,  // 이 줄 추가
+    hasPurchasedProduct,    // 이 줄 추가
+    hasReviewedProduct,     // 이 줄 추가
+    addReview,           // 추가
+    updateReview,        // 추가
+    deleteReview,        // 추가
+    toggleReviewHelpful, // 추가
   }
 
   return (
@@ -299,6 +638,7 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   )
+  
 }
 
 export function useAuth() {
@@ -307,4 +647,36 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
+}
+
+
+
+// getAllOrders 함수도 Supabase 기반으로 수정
+const getAllOrders = async () => {
+  if (!supabase) {
+    // Supabase가 없으면 localStorage 사용
+    try {
+      return JSON.parse(localStorage.getItem('allOrders') || '[]')
+    } catch {
+      return []
+    }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('주문 조회 실패:', error)
+      // 실패 시 localStorage 사용
+      return JSON.parse(localStorage.getItem('allOrders') || '[]')
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('주문 조회 중 오류:', error)
+    return []
+  }
 }

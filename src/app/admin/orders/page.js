@@ -61,15 +61,73 @@ export default function AdminOrdersPage() {
       router.push('/')
       return
     }
-
-    loadOrders()
+  
+    loadOrders() // 이제 async 함수이므로 await 없이 호출
   }, [isAdmin, router])
 
-  const loadOrders = () => {
-    const allOrders = getAllOrders()
-    setOrders(allOrders)
-    setFilteredOrders(allOrders)
-    setIsLoading(false)
+  const loadOrders = async () => {
+    try {
+      setIsLoading(true)
+      
+      const { getSupabase } = await import('@/lib/supabase')
+      const supabase = getSupabase()
+      
+      if (!supabase) {
+        console.warn('Supabase 연결 실패')
+        setOrders([])
+        setFilteredOrders([])
+        return
+      }
+  
+      console.log('📦 관리자 주문 조회 시작...')
+  
+      // 모든 주문 조회 (사용자 정보와 함께)
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          users (
+            name,
+            email
+          )
+        `)
+        .order('created_at', { ascending: false })
+  
+      if (error) {
+        console.error('주문 조회 실패:', error)
+        setOrders([])
+        setFilteredOrders([])
+        return
+      }
+  
+      console.log('✅ 주문 조회 성공:', data.length, '개')
+  
+      // 데이터 형식 변환
+      const formattedOrders = data.map(order => ({
+        id: order.id,
+        orderNumber: `PS${order.id}`,
+        userId: order.user_id,
+        customerName: order.users?.name || '알 수 없음',
+        customerEmail: order.users?.email || '알 수 없음',
+        items: order.items || [],
+        totalAmount: order.total_amount,
+        itemsTotal: order.total_amount, // 임시
+        shippingFee: 0, // 임시
+        status: order.status,
+        createdAt: order.created_at,
+        shipping: order.shipping_address
+      }))
+  
+      setOrders(formattedOrders)
+      setFilteredOrders(formattedOrders)
+      
+    } catch (error) {
+      console.error('주문 로드 중 오류:', error)
+      setOrders([])
+      setFilteredOrders([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // 검색 및 필터링
@@ -100,16 +158,49 @@ export default function AdminOrdersPage() {
   }
 
   const confirmStatusChange = async () => {
-    if (selectedOrder && newStatus) {
-      const success = updateOrderStatus(selectedOrder.id, newStatus)
-      if (success) {
-        loadOrders() // 주문 목록 새로고침
-        setShowStatusModal(false)
-        setSelectedOrder(null)
-        setNewStatus('')
-      } else {
-        alert('주문 상태 변경에 실패했습니다.')
+    if (!selectedOrder || !newStatus) return
+  
+    try {
+      const { getSupabase } = await import('@/lib/supabase')
+      const supabase = getSupabase()
+      
+      if (!supabase) {
+        alert('Supabase 연결 실패')
+        return
       }
+  
+      console.log('🔄 주문 상태 변경 시작:', selectedOrder.id, '→', newStatus)
+  
+      // Supabase에서 주문 상태 업데이트
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedOrder.id)
+        .select()
+  
+      if (error) {
+        console.error('주문 상태 변경 실패:', error)
+        alert('주문 상태 변경에 실패했습니다.')
+        return
+      }
+  
+      console.log('✅ 주문 상태 변경 성공:', data)
+  
+      // 주문 목록 새로고침
+      await loadOrders()
+      
+      setShowStatusModal(false)
+      setSelectedOrder(null)
+      setNewStatus('')
+      
+      alert(`주문 상태가 "${STATUS_LABELS[newStatus]}"로 변경되었습니다.`)
+      
+    } catch (error) {
+      console.error('주문 상태 변경 중 오류:', error)
+      alert('주문 상태 변경 중 오류가 발생했습니다.')
     }
   }
 
@@ -353,28 +444,53 @@ export default function AdminOrdersPage() {
                             >
                               <Eye size={16} />
                             </button>
-                            <div className="relative group">
+                            
+                            {/* 상태 변경 드롭다운 - 클릭 기반으로 수정 */}
+                            <div className="relative">
                               <button
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  // 다음 상태로 자동 진행하는 버튼
+                                  const statusFlow = {
+                                    [ORDER_STATUS.PENDING]: ORDER_STATUS.PROCESSING,
+                                    [ORDER_STATUS.PROCESSING]: ORDER_STATUS.SHIPPED,
+                                    [ORDER_STATUS.SHIPPED]: ORDER_STATUS.DELIVERED,
+                                    [ORDER_STATUS.DELIVERED]: ORDER_STATUS.DELIVERED, // 이미 완료
+                                    [ORDER_STATUS.CANCELLED]: ORDER_STATUS.CANCELLED // 취소된 건 변경 불가
+                                  }
+                                  const nextStatus = statusFlow[order.status]
+                                  if (nextStatus && nextStatus !== order.status) {
+                                    handleStatusChange(order, nextStatus)
+                                  }
+                                }}
                                 className="text-gray-600 hover:text-indigo-600 transition-colors p-2"
-                                title="상태 변경"
+                                title={
+                                  order.status === ORDER_STATUS.PENDING ? "처리 중으로 변경" :
+                                  order.status === ORDER_STATUS.PROCESSING ? "배송 중으로 변경" :
+                                  order.status === ORDER_STATUS.SHIPPED ? "배송 완료로 변경" :
+                                  order.status === ORDER_STATUS.DELIVERED ? "이미 완료됨" :
+                                  "변경 불가"
+                                }
+                                disabled={order.status === ORDER_STATUS.DELIVERED || order.status === ORDER_STATUS.CANCELLED}
                               >
                                 <Edit size={16} />
                               </button>
-                              {/* 상태 변경 드롭다운 */}
-                              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-20 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                                {Object.entries(STATUS_LABELS).map(([status, label]) => (
-                                  <button
-                                    key={status}
-                                    onClick={() => handleStatusChange(order, status)}
-                                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 transition-colors flex items-center space-x-2 ${
-                                      order.status === status ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700'
-                                    }`}
-                                  >
-                                    {getStatusIcon(status)}
-                                    <span>{label}</span>
-                                  </button>
-                                ))}
-                              </div>
+                            </div>
+                            
+                            {/* 모든 상태 선택 버튼 추가 */}
+                            <div className="relative">
+                              <button
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  // 상태 선택 모달을 위한 임시 상태
+                                  setNewStatus(order.status)
+                                  setShowStatusModal(true)
+                                }}
+                                className="text-gray-600 hover:text-green-600 transition-colors p-2 text-xs bg-gray-100 rounded px-2 py-1"
+                                title="상태 직접 선택"
+                              >
+                                상태변경
+                              </button>
                             </div>
                           </div>
                         </td>
@@ -533,15 +649,40 @@ export default function AdminOrdersPage() {
         </div>
       )}
 
-      {/* 상태 변경 확인 모달 */}
+      {/* 상태 변경 확인 모달 - 개선된 버전 */}
       {showStatusModal && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">주문 상태 변경</h3>
-            <p className="text-gray-600 mb-6">
-              주문번호 &quot;<strong>{selectedOrder.orderNumber}</strong>&quot;의 상태를
-              "<strong className="text-indigo-600">{STATUS_LABELS[newStatus]}</strong>"로 변경하시겠습니까?
+            <p className="text-gray-600 mb-4">
+              주문번호: <strong>{selectedOrder.orderNumber}</strong>
             </p>
+            <p className="text-gray-600 mb-6">
+              현재 상태: <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[selectedOrder.status]}`}>
+                {STATUS_LABELS[selectedOrder.status]}
+              </span>
+            </p>
+            
+            {/* 상태 선택 버튼들 */}
+            <div className="space-y-2 mb-6">
+              <p className="text-sm font-medium text-gray-700">변경할 상태를 선택하세요:</p>
+              <div className="grid grid-cols-1 gap-2">
+                {Object.entries(STATUS_LABELS).map(([status, label]) => (
+                  <button
+                    key={status}
+                    onClick={() => setNewStatus(status)}
+                    className={`text-left px-4 py-3 rounded-lg border transition-all flex items-center space-x-3 ${
+                      newStatus === status 
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700' 
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {getStatusIcon(status)}
+                    <span className="font-medium">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             
             <div className="flex space-x-3">
               <button
@@ -556,9 +697,10 @@ export default function AdminOrdersPage() {
               </button>
               <button
                 onClick={confirmStatusChange}
-                className="flex-1 bg-indigo-500 text-white py-3 rounded-lg font-semibold hover:bg-indigo-600 transition-colors"
+                disabled={!newStatus || newStatus === selectedOrder.status}
+                className="flex-1 bg-indigo-500 text-white py-3 rounded-lg font-semibold hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                변경
+                {newStatus === selectedOrder.status ? '동일한 상태' : '변경 확인'}
               </button>
             </div>
           </div>

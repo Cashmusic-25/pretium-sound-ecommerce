@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Star, Camera, Loader } from 'lucide-react'
 import StarRating from './StarRating'
 
@@ -13,11 +13,31 @@ export default function ReviewModal({
   editingReview = null
 }) {
   const [reviewForm, setReviewForm] = useState({
-    rating: editingReview?.rating || 0,
-    title: editingReview?.title || '',
-    content: editingReview?.content || '',
-    photos: editingReview?.photos || []
+    rating: 0,
+    title: '',
+    content: '',
+    photos: []
   })
+  // editingReview가 변경될 때마다 폼 데이터 업데이트
+  useEffect(() => {
+    if (editingReview) {
+      setReviewForm({
+        rating: editingReview.rating || 0,
+        title: editingReview.title || '',
+        content: editingReview.content || '',
+        photos: editingReview.photos || []
+      })
+    } else {
+      // 새 리뷰 작성시 폼 초기화
+      setReviewForm({
+        rating: 0,
+        title: '',
+        content: '',
+        photos: []
+      })
+    }
+  }, [editingReview])
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -60,10 +80,10 @@ export default function ReviewModal({
     e.preventDefault()
     
     if (!validateForm()) return
-
+  
     setIsSubmitting(true)
     setError('')
-
+  
     try {
       if (editingReview) {
         // 수정 모드
@@ -76,7 +96,7 @@ export default function ReviewModal({
           updatedAt: new Date().toISOString()
         }
         
-        await onSubmitReview(updatedReview, true) // 두 번째 매개변수로 수정임을 표시
+        await onSubmitReview(updatedReview, true)
       } else {
         // 새 리뷰 작성
         const newReview = {
@@ -93,7 +113,7 @@ export default function ReviewModal({
           helpfulUsers: [],
           verified: true
         }
-
+  
         await onSubmitReview(newReview, false)
       }
       
@@ -179,7 +199,12 @@ export default function ReviewModal({
       {/* 배경 오버레이 */}
       <div 
         className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
+        onMouseDown={(e) => {
+          // 배경을 직접 클릭했을 때만 닫기
+          if (e.target === e.currentTarget) {
+            onClose()
+          }
+        }}
       >
         {/* 모달 컨테이너 */}
         <div 
