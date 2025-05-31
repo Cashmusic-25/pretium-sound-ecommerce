@@ -2,7 +2,7 @@
 const nextConfig = {
   eslint: {
     // 배포 시 ESLint 에러를 무시 (임시 해결책)
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true,  // 이 줄만 추가하면 됩니다
   },
   experimental: {
     esmExternals: 'loose',
