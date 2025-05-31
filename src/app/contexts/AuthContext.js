@@ -1,6 +1,6 @@
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { getSupabase } from '../../lib/supabase'
+import { getSupabase, resetSupabaseClient } from '../../lib/supabase'
 
 const AuthContext = createContext()
 
@@ -8,32 +8,32 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [supabase, setSupabase] = useState(null)
-  const [initialized, setInitialized] = useState(false)
+  const [error, setError] = useState(null)
+  const [retryCount, setRetryCount] = useState(0)
 
-  // Supabase 초기화
-  const initializeSupabase = useCallback(async () => {
-    if (initialized || typeof window === 'undefined') {
+  const initializeAuth = useCallback(async () => {
+    // 서버 사이드에서는 실행하지 않음
+    if (typeof window === 'undefined') {
+      setLoading(false)
       return
     }
 
     try {
-      console.log('🚀 Supabase 초기화 시작...')
+      console.log('🚀 Auth 초기화 시작... (시도:', retryCount + 1, ')')
+      setError(null)
       
       const client = await getSupabase()
       if (!client) {
-        console.error('❌ Supabase 클라이언트를 생성할 수 없습니다.')
-        setLoading(false)
-        return
+        throw new Error('Supabase 클라이언트를 생성할 수 없습니다.')
       }
 
       setSupabase(client)
-      setInitialized(true)
 
       // 현재 세션 확인
-      const { data: { session }, error } = await client.auth.getSession()
+      const { data: { session }, error: sessionError } = await client.auth.getSession()
       
-      if (error) {
-        console.error('세션 가져오기 오류:', error)
+      if (sessionError) {
+        console.warn('세션 가져오기 경고:', sessionError)
       } else if (session?.user) {
         console.log('✅ 기존 세션 복원:', session.user.email)
         setUser(session.user)
@@ -51,25 +51,36 @@ export function AuthProvider({ children }) {
       )
 
       setLoading(false)
+      setRetryCount(0) // 성공 시 재시도 카운트 리셋
 
-      // 클린업 함수 반환
       return () => {
-        subscription.unsubscribe()
+        subscription?.unsubscribe()
       }
 
     } catch (error) {
-      console.error('💥 Supabase 초기화 실패:', error)
+      console.error('💥 Auth 초기화 실패:', error)
+      setError(error.message)
       setLoading(false)
+
+      // 3번까지 재시도
+      if (retryCount < 3) {
+        console.log('🔄 5초 후 재시도...')
+        setTimeout(() => {
+          resetSupabaseClient() // 클라이언트 리셋
+          setRetryCount(prev => prev + 1)
+        }, 5000)
+      } else {
+        console.error('❌ 최대 재시도 횟수 초과')
+      }
     }
-  }, [initialized])
+  }, [retryCount])
 
   useEffect(() => {
     let cleanup = null
 
-    // hydration 완료 후 초기화
     const timer = setTimeout(async () => {
-      cleanup = await initializeSupabase()
-    }, 0)
+      cleanup = await initializeAuth()
+    }, 100)
 
     return () => {
       clearTimeout(timer)
@@ -77,15 +88,16 @@ export function AuthProvider({ children }) {
         cleanup()
       }
     }
-  }, [initializeSupabase])
+  }, [initializeAuth])
 
   const signIn = async (email, password) => {
     if (!supabase) {
-      throw new Error('Supabase가 아직 초기화되지 않았습니다. 잠시 후 다시 시도해주세요.')
+      throw new Error('인증 시스템이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.')
     }
 
     try {
       setLoading(true)
+      setError(null)
       console.log('🔐 로그인 시도:', email)
   
       if (!email || !password) {
@@ -111,6 +123,7 @@ export function AuthProvider({ children }) {
   
     } catch (error) {
       console.error('💥 로그인 실패:', error)
+      setError(error.message)
       return { user: null, error }
     } finally {
       setLoading(false)
@@ -119,11 +132,12 @@ export function AuthProvider({ children }) {
   
   const signUp = async (userData) => {
     if (!supabase) {
-      throw new Error('Supabase가 아직 초기화되지 않았습니다.')
+      throw new Error('인증 시스템이 아직 준비되지 않았습니다.')
     }
 
     try {
       setLoading(true)
+      setError(null)
       console.log('📝 회원가입 시도:', userData.email)
   
       const { data, error } = await supabase.auth.signUp({
@@ -146,6 +160,7 @@ export function AuthProvider({ children }) {
   
     } catch (error) {
       console.error('💥 회원가입 실패:', error)
+      setError(error.message)
       return { user: null, error }
     } finally {
       setLoading(false)
@@ -154,7 +169,7 @@ export function AuthProvider({ children }) {
   
   const signOut = async () => {
     if (!supabase) {
-      throw new Error('Supabase가 아직 초기화되지 않았습니다.')
+      throw new Error('인증 시스템이 준비되지 않았습니다.')
     }
 
     try {
@@ -171,10 +186,17 @@ export function AuthProvider({ children }) {
       setUser(null)
     } catch (error) {
       console.error('💥 로그아웃 실패:', error)
-      setUser(null)
+      setUser(null) // 강제 로그아웃
       throw error
     }
   }
+
+  // 수동 재시도 함수
+  const retry = useCallback(() => {
+    setRetryCount(0)
+    setError(null)
+    initializeAuth()
+  }, [initializeAuth])
 
   // 관리자 권한 확인
   const isAdmin = user?.email === 'admin@pretiumsound.com' || user?.user_metadata?.role === 'admin'
@@ -182,9 +204,11 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
+    error,
     signIn,
     signUp,
     signOut,
+    retry,
     isAuthenticated: !!user,
     isAdmin,
     supabaseReady: !!supabase,
