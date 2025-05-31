@@ -1,17 +1,32 @@
 'use client'
 import { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'  // 2개
+import dynamic from 'next/dynamic'
 
 const AuthContext = createContext()
+
+// Supabase를 동적으로 import
+const initSupabase = async () => {
+  if (typeof window !== 'undefined') {
+    const { supabase } = await import('../../lib/supabase')
+    return supabase
+  }
+  return null
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [supabaseClient, setSupabaseClient] = useState(null)
 
   useEffect(() => {
-    // 현재 세션 확인 (새로고침 시 세션 복원)
-    const getSession = async () => {
+    const setupAuth = async () => {
       try {
+        const supabase = await initSupabase()
+        if (!supabase) return
+        
+        setSupabaseClient(supabase)
+
+        // 현재 세션 확인
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
@@ -22,47 +37,46 @@ export function AuthProvider({ children }) {
         } else {
           console.log('❌ 기존 세션 없음')
         }
+
+        // 인증 상태 변화 감지
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            console.log('🔄 인증 상태 변화:', event, session?.user?.email)
+            
+            if (session?.user) {
+              setUser(session.user)
+            } else {
+              setUser(null)
+            }
+            setLoading(false)
+          }
+        )
+
+        setLoading(false)
+        return () => subscription.unsubscribe()
       } catch (error) {
-        console.error('세션 확인 오류:', error)
-      } finally {
+        console.error('Auth 설정 오류:', error)
         setLoading(false)
       }
     }
 
-    getSession()
-
-    // 인증 상태 변화 감지
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('🔄 인증 상태 변화:', event, session?.user?.email)
-        
-        if (session?.user) {
-          setUser(session.user)
-        } else {
-          setUser(null)
-        }
-        setLoading(false)
-      }
-    )
-
-    return () => subscription.unsubscribe()
+    setupAuth()
   }, [])
 
   const signIn = async (email, password) => {
+    if (!supabaseClient) {
+      throw new Error('Supabase client not initialized')
+    }
+
     try {
       setLoading(true)
       console.log('🔐 실제 Supabase 로그인 시도:', email)
   
-      // 입력값 검증
       if (!email || !password) {
         throw new Error('이메일과 비밀번호를 입력해주세요.')
       }
   
-      console.log('📡 Supabase 호출 준비...')
-      console.log('Method type:', typeof supabase.auth.signInWithPassword)
-      
-      // 실제 Supabase 호출
-      const response = await supabase.auth.signInWithPassword({
+      const response = await supabaseClient.auth.signInWithPassword({
         email: email.trim(),
         password: password
       })
@@ -93,11 +107,15 @@ export function AuthProvider({ children }) {
   }
   
   const signUp = async (userData) => {
+    if (!supabaseClient) {
+      throw new Error('Supabase client not initialized')
+    }
+
     try {
       setLoading(true)
       console.log('📝 실제 Supabase 회원가입 시도:', userData.email)
   
-      const response = await supabase.auth.signUp({
+      const response = await supabaseClient.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -126,10 +144,14 @@ export function AuthProvider({ children }) {
   }
   
   const signOut = async () => {
+    if (!supabaseClient) {
+      throw new Error('Supabase client not initialized')
+    }
+
     try {
       console.log('🚪 실제 Supabase 로그아웃')
       
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabaseClient.auth.signOut()
       
       if (error) {
         console.error('로그아웃 에러:', error)
@@ -140,44 +162,13 @@ export function AuthProvider({ children }) {
       setUser(null)
     } catch (error) {
       console.error('💥 로그아웃 실패:', error)
-      setUser(null) // 강제로 로그아웃
+      setUser(null)
       throw error
     }
   }
 
   // 관리자 권한 확인
   const isAdmin = user?.email === 'admin@pretiumsound.com' || user?.user_metadata?.role === 'admin'
-
-  // 위시리스트 관련 함수들 (기존 코드 유지)
-  const toggleWishlist = async (productId) => {
-    // 기존 코드...
-  }
-
-  const hasPurchasedProduct = (productId) => {
-    // 기존 코드...
-    return false // 임시
-  }
-
-  const hasReviewedProduct = (productId) => {
-    // 기존 코드...
-    return false // 임시
-  }
-
-  const addReview = async (reviewData) => {
-    // 기존 코드...
-  }
-
-  const updateReview = async (reviewId, reviewData) => {
-    // 기존 코드...
-  }
-
-  const deleteReview = async (reviewId) => {
-    // 기존 코드...
-  }
-
-  const toggleReviewHelpful = async (reviewId) => {
-    // 기존 코드...
-  }
 
   const value = {
     user,
@@ -187,13 +178,7 @@ export function AuthProvider({ children }) {
     signOut,
     isAuthenticated: !!user,
     isAdmin,
-    toggleWishlist,
-    hasPurchasedProduct,
-    hasReviewedProduct,
-    addReview,
-    updateReview,
-    deleteReview,
-    toggleReviewHelpful,
+    // 다른 함수들도 여기에 추가
   }
 
   return (
