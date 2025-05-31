@@ -3,6 +3,8 @@ import './globals.css'
 import { CartProvider } from './contexts/CartContext'
 import { FilterProvider } from './contexts/FilterContext'
 import { AuthProvider } from './contexts/AuthContext'
+import DebugAuth from './components/DebugAuth'
+
 
 const inter = Inter({ subsets: ['latin'] })
 
