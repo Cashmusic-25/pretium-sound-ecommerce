@@ -1,9 +1,28 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-    eslint: {
-      // 빌드 시 ESLint 에러 무시
-      ignoreDuringBuilds: true,
-    },
-  }
-  
-  export default nextConfig
+  experimental: {
+    esmExternals: 'loose',
+  },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        crypto: false,
+      }
+    }
+    
+    // Supabase 관련 모듈 처리
+    config.module.rules.push({
+      test: /\.m?js$/,
+      resolve: {
+        fullySpecified: false,
+      },
+    })
+
+    return config
+  },
+  transpilePackages: ['@supabase/supabase-js'],
+}

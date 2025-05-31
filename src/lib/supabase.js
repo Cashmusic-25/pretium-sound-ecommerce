@@ -1,58 +1,49 @@
-import { createClient } from '@supabase/supabase-js'
+// Supabase 클라이언트를 동적으로 생성하는 방식
+let supabaseClient = null
 
-// 환경 변수 로드
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-// 클라이언트 사이드에서만 로그 출력
-if (typeof window !== 'undefined') {
-  console.log('🔧 Supabase 초기화 시작...')
-  console.log('URL 존재:', !!supabaseUrl)
-  console.log('Key 존재:', !!supabaseKey)
-}
-
-if (!supabaseUrl || !supabaseKey) {
-  if (typeof window !== 'undefined') {
-    console.error('❌ Supabase 환경 변수가 없습니다!')
-    console.log('URL:', supabaseUrl)
-    console.log('Key:', supabaseKey ? `${supabaseKey.slice(0, 20)}...` : 'undefined')
+export const getSupabase = async () => {
+  // 이미 생성된 클라이언트가 있다면 재사용
+  if (supabaseClient) {
+    return supabaseClient
   }
-  throw new Error('Missing Supabase environment variables')
-}
 
-// Supabase 클라이언트 생성 함수
-export const createSupabaseClient = () => {
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined
-    },
-    global: {
-      headers: {
-        'X-Client-Info': 'nextjs'
-      }
+  // 브라우저 환경에서만 실행
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    // 동적 import 사용
+    const { createClient } = await import('@supabase/supabase-js')
+    
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('❌ Supabase 환경 변수가 설정되지 않았습니다.')
+      return null
     }
-  })
-}
 
-// 기본 클라이언트 (브라우저에서만)
-let supabase = null
+    console.log('🔧 Supabase 클라이언트 생성 중...')
 
-if (typeof window !== 'undefined') {
-  supabase = createSupabaseClient()
-  
-  // 클라이언트 검증
-  console.log('✅ Supabase 클라이언트 생성 완료')
-  console.log('Auth 객체:', !!supabase.auth)
-  console.log('signInWithPassword:', typeof supabase.auth?.signInWithPassword)
-  
-  // 메서드 존재 확인
-  if (!supabase.auth || typeof supabase.auth.signInWithPassword !== 'function') {
-    console.error('❌ Supabase auth 메서드를 사용할 수 없습니다!')
-    throw new Error('Supabase auth methods not available')
+    // 클라이언트 생성
+    supabaseClient = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage
+      }
+    })
+
+    console.log('✅ Supabase 클라이언트 생성 완료')
+    return supabaseClient
+
+  } catch (error) {
+    console.error('❌ Supabase 클라이언트 생성 실패:', error)
+    return null
   }
 }
 
-export { supabase }
+// 레거시 지원을 위한 export (사용하지 말 것)
+export const supabase = null

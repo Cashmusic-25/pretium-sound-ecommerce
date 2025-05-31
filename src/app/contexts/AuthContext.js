@@ -1,6 +1,6 @@
 'use client'
-import { createContext, useContext, useState, useEffect } from 'react'
-import { createSupabaseClient } from '../../lib/supabase'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { getSupabase } from '../../lib/supabase'
 
 const AuthContext = createContext()
 
@@ -8,110 +8,97 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [supabase, setSupabase] = useState(null)
+  const [initialized, setInitialized] = useState(false)
 
-  useEffect(() => {
-    // 클라이언트 사이드에서만 실행
-    if (typeof window === 'undefined') {
-      setLoading(false)
+  // Supabase 초기화
+  const initializeSupabase = useCallback(async () => {
+    if (initialized || typeof window === 'undefined') {
       return
     }
 
-    let mounted = true
-    let authSubscription = null
-
-    const initializeAuth = async () => {
-      try {
-        console.log('🔄 Auth 초기화 시작...')
-        
-        // Supabase 클라이언트 생성
-        const client = createSupabaseClient()
-        
-        if (!mounted) return
-        setSupabase(client)
-
-        // 현재 세션 확인 (새로고침 시 세션 복원)
-        const { data: { session }, error } = await client.auth.getSession()
-        
-        if (!mounted) return
-
-        if (error) {
-          console.error('세션 가져오기 오류:', error)
-        } else if (session?.user) {
-          console.log('✅ 기존 세션 복원:', session.user.email)
-          setUser(session.user)
-        } else {
-          console.log('❌ 기존 세션 없음')
-        }
-
-        // 인증 상태 변화 감지
-        const { data: { subscription } } = client.auth.onAuthStateChange(
-          async (event, session) => {
-            if (!mounted) return
-            
-            console.log('🔄 인증 상태 변화:', event, session?.user?.email)
-            
-            if (session?.user) {
-              setUser(session.user)
-            } else {
-              setUser(null)
-            }
-            setLoading(false)
-          }
-        )
-
-        authSubscription = subscription
-        if (mounted) {
-          setLoading(false)
-        }
-
-      } catch (error) {
-        console.error('Auth 초기화 오류:', error)
-        if (mounted) {
-          setLoading(false)
-        }
+    try {
+      console.log('🚀 Supabase 초기화 시작...')
+      
+      const client = await getSupabase()
+      if (!client) {
+        console.error('❌ Supabase 클라이언트를 생성할 수 없습니다.')
+        setLoading(false)
+        return
       }
-    }
 
-    // 초기화 지연 실행 (hydration 완료 후)
-    const timer = setTimeout(initializeAuth, 100)
+      setSupabase(client)
+      setInitialized(true)
+
+      // 현재 세션 확인
+      const { data: { session }, error } = await client.auth.getSession()
+      
+      if (error) {
+        console.error('세션 가져오기 오류:', error)
+      } else if (session?.user) {
+        console.log('✅ 기존 세션 복원:', session.user.email)
+        setUser(session.user)
+      } else {
+        console.log('❌ 기존 세션 없음')
+      }
+
+      // 인증 상태 변화 감지
+      const { data: { subscription } } = client.auth.onAuthStateChange(
+        (event, session) => {
+          console.log('🔄 인증 상태 변화:', event, session?.user?.email)
+          setUser(session?.user || null)
+          setLoading(false)
+        }
+      )
+
+      setLoading(false)
+
+      // 클린업 함수 반환
+      return () => {
+        subscription.unsubscribe()
+      }
+
+    } catch (error) {
+      console.error('💥 Supabase 초기화 실패:', error)
+      setLoading(false)
+    }
+  }, [initialized])
+
+  useEffect(() => {
+    let cleanup = null
+
+    // hydration 완료 후 초기화
+    const timer = setTimeout(async () => {
+      cleanup = await initializeSupabase()
+    }, 0)
 
     return () => {
-      mounted = false
       clearTimeout(timer)
-      if (authSubscription) {
-        authSubscription.unsubscribe()
+      if (cleanup && typeof cleanup === 'function') {
+        cleanup()
       }
     }
-  }, [])
+  }, [initializeSupabase])
 
   const signIn = async (email, password) => {
     if (!supabase) {
-      throw new Error('Supabase client not ready')
+      throw new Error('Supabase가 아직 초기화되지 않았습니다. 잠시 후 다시 시도해주세요.')
     }
 
     try {
       setLoading(true)
-      console.log('🔐 실제 Supabase 로그인 시도:', email)
+      console.log('🔐 로그인 시도:', email)
   
-      // 입력값 검증
       if (!email || !password) {
         throw new Error('이메일과 비밀번호를 입력해주세요.')
       }
   
-      console.log('📡 Supabase 호출 준비...')
-      
-      // 실제 Supabase 호출
-      const response = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
       })
   
-      console.log('📥 Supabase 응답:', response)
-  
-      const { data, error } = response
-  
       if (error) {
-        console.error('🚨 Supabase 에러:', error)
+        console.error('🚨 로그인 에러:', error)
         throw error
       }
   
@@ -120,7 +107,6 @@ export function AuthProvider({ children }) {
       }
   
       console.log('✅ 로그인 성공:', data.user.email)
-      setUser(data.user)
       return { user: data.user, error: null }
   
     } catch (error) {
@@ -133,14 +119,14 @@ export function AuthProvider({ children }) {
   
   const signUp = async (userData) => {
     if (!supabase) {
-      throw new Error('Supabase client not ready')
+      throw new Error('Supabase가 아직 초기화되지 않았습니다.')
     }
 
     try {
       setLoading(true)
-      console.log('📝 실제 Supabase 회원가입 시도:', userData.email)
+      console.log('📝 회원가입 시도:', userData.email)
   
-      const response = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
@@ -149,8 +135,6 @@ export function AuthProvider({ children }) {
           }
         }
       })
-  
-      const { data, error } = response
   
       if (error) {
         console.error('🚨 회원가입 에러:', error)
@@ -170,11 +154,11 @@ export function AuthProvider({ children }) {
   
   const signOut = async () => {
     if (!supabase) {
-      throw new Error('Supabase client not ready')
+      throw new Error('Supabase가 아직 초기화되지 않았습니다.')
     }
 
     try {
-      console.log('🚪 실제 Supabase 로그아웃')
+      console.log('🚪 로그아웃 시도')
       
       const { error } = await supabase.auth.signOut()
       
@@ -187,44 +171,13 @@ export function AuthProvider({ children }) {
       setUser(null)
     } catch (error) {
       console.error('💥 로그아웃 실패:', error)
-      setUser(null) // 강제로 로그아웃
+      setUser(null)
       throw error
     }
   }
 
   // 관리자 권한 확인
   const isAdmin = user?.email === 'admin@pretiumsound.com' || user?.user_metadata?.role === 'admin'
-
-  // 위시리스트 관련 함수들 (기존 코드 유지)
-  const toggleWishlist = async (productId) => {
-    // 기존 코드...
-  }
-
-  const hasPurchasedProduct = (productId) => {
-    // 기존 코드...
-    return false // 임시
-  }
-
-  const hasReviewedProduct = (productId) => {
-    // 기존 코드...
-    return false // 임시
-  }
-
-  const addReview = async (reviewData) => {
-    // 기존 코드...
-  }
-
-  const updateReview = async (reviewId, reviewData) => {
-    // 기존 코드...
-  }
-
-  const deleteReview = async (reviewId) => {
-    // 기존 코드...
-  }
-
-  const toggleReviewHelpful = async (reviewId) => {
-    // 기존 코드...
-  }
 
   const value = {
     user,
@@ -234,13 +187,7 @@ export function AuthProvider({ children }) {
     signOut,
     isAuthenticated: !!user,
     isAdmin,
-    toggleWishlist,
-    hasPurchasedProduct,
-    hasReviewedProduct,
-    addReview,
-    updateReview,
-    deleteReview,
-    toggleReviewHelpful,
+    supabaseReady: !!supabase,
   }
 
   return (
