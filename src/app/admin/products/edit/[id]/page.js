@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../../../contexts/AuthContext'  // 상대경로로 복구
 import { products } from '../../../../../data/products'      // 상대경로로 복구
-import { supabase } from '../../../../../lib/supabase' 
+import { supabase } from '../../../../../lib/supabase'  // 6개 - 맞음
 import Header from '../../../../components/Header'           // 상대경로로 복구
 
 // 이미지 업로드 함수 (임시로 파일 내부에 정의)
