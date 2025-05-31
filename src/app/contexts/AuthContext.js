@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
       console.log('🚀 Auth 초기화 시작... (시도:', retryCount + 1, ')')
       setError(null)
       
-      const client = getSupabase()
+      const client = await getSupabase()
       if (!client) {
         throw new Error('Supabase 클라이언트를 생성할 수 없습니다. 환경 변수를 확인해주세요.')
       }

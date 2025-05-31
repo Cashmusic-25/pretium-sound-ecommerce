@@ -1,10 +1,8 @@
 // src/lib/supabase.js - 프로덕션 안전한 버전
 
-import { createClient } from '@supabase/supabase-js'
-
 let supabaseInstance = null
 
-const createSupabaseClient = () => {
+const createSupabaseClient = async () => {
   try {
     // 환경 변수 확인
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -24,6 +22,9 @@ const createSupabaseClient = () => {
     }
 
     console.log('🔧 Supabase 클라이언트 생성 중...')
+
+    // 동적 import로 클라이언트 사이드에서만 로드
+    const { createClient } = await import('@supabase/supabase-js')
 
     const client = createClient(supabaseUrl, supabaseKey, {
       auth: {
@@ -52,7 +53,7 @@ const createSupabaseClient = () => {
   }
 }
 
-export const getSupabase = () => {
+export const getSupabase = async () => {
   // 서버 사이드에서는 null 반환
   if (typeof window === 'undefined') {
     console.log('🚫 서버 사이드에서 Supabase 요청됨')
@@ -65,12 +66,12 @@ export const getSupabase = () => {
   }
 
   // 새로운 인스턴스 생성
-  supabaseInstance = createSupabaseClient()
+  supabaseInstance = await createSupabaseClient()
   return supabaseInstance
 }
 
 // 레거시 호환성을 위한 export
-export const supabase = typeof window !== 'undefined' ? getSupabase() : null
+export const supabase = null
 
 // 클라이언트 초기화 상태 확인
 export const isSupabaseReady = () => {
