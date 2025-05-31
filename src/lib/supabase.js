@@ -11,6 +11,9 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_A
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false // 빌드 시 세션 관련 오류 방지
+    persistSession: true,        // 세션 유지 활성화
+    autoRefreshToken: true,      // 토큰 자동 갱신
+    detectSessionInUrl: true,    // URL에서 세션 감지
+    flowType: 'pkce'            // 보안 강화
   }
 })
