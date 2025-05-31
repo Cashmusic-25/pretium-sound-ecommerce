@@ -51,94 +51,96 @@ export function AuthProvider({ children }) {
   const signIn = async (email, password) => {
     try {
       setLoading(true)
-      console.log('🔐 로그인 시도:', email)
-      console.log('🔧 Supabase auth object:', supabase.auth)
-      console.log('🔧 signInWithPassword type:', typeof supabase.auth.signInWithPassword)
+      console.log('🔐 실제 Supabase 로그인 시도:', email)
   
-      // Supabase auth 메서드 확인
-      if (!supabase || !supabase.auth) {
-        throw new Error('Supabase client not available')
+      // 입력값 검증
+      if (!email || !password) {
+        throw new Error('이메일과 비밀번호를 입력해주세요.')
       }
   
-      if (typeof supabase.auth.signInWithPassword !== 'function') {
-        console.error('❌ signInWithPassword is not a function:', typeof supabase.auth.signInWithPassword)
-        throw new Error('signInWithPassword method not available')
-      }
-  
-      // 안전한 호출
-      const result = await supabase.auth.signInWithPassword({
+      console.log('📡 Supabase 호출 준비...')
+      console.log('Method type:', typeof supabase.auth.signInWithPassword)
+      
+      // 실제 Supabase 호출
+      const response = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password
       })
   
-      console.log('📤 Auth result:', result)
+      console.log('📥 Supabase 응답:', response)
   
-      const { data, error } = result
+      const { data, error } = response
   
       if (error) {
-        console.error('로그인 오류:', error)
+        console.error('🚨 Supabase 에러:', error)
         throw error
       }
   
-      if (!data || !data.user) {
-        throw new Error('No user data received')
+      if (!data?.user) {
+        throw new Error('사용자 데이터가 없습니다.')
       }
   
       console.log('✅ 로그인 성공:', data.user.email)
+      setUser(data.user)
       return { user: data.user, error: null }
   
     } catch (error) {
-      console.error('인증 에러:', error)
+      console.error('💥 로그인 실패:', error)
       return { user: null, error }
     } finally {
       setLoading(false)
     }
   }
-
+  
   const signUp = async (userData) => {
     try {
       setLoading(true)
-      console.log('📝 회원가입 시도:', userData)
-      
-      const { data, error } = await supabase.auth.signUp({
+      console.log('📝 실제 Supabase 회원가입 시도:', userData.email)
+  
+      const response = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
           data: {
-            name: userData.name,
+            name: userData.name
           }
         }
       })
-
+  
+      const { data, error } = response
+  
       if (error) {
-        console.error('회원가입 오류:', error)
+        console.error('🚨 회원가입 에러:', error)
         throw error
       }
-
+  
       console.log('✅ 회원가입 성공:', data.user?.email)
       return { user: data.user, error: null }
+  
     } catch (error) {
-      console.error('인증 에러:', error)
+      console.error('💥 회원가입 실패:', error)
       return { user: null, error }
     } finally {
       setLoading(false)
     }
   }
-
+  
   const signOut = async () => {
     try {
-      console.log('🚪 로그아웃 시도')
+      console.log('🚪 실제 Supabase 로그아웃')
+      
       const { error } = await supabase.auth.signOut()
       
       if (error) {
-        console.error('로그아웃 오류:', error)
+        console.error('로그아웃 에러:', error)
         throw error
       }
       
       console.log('✅ 로그아웃 성공')
       setUser(null)
     } catch (error) {
-      console.error('로그아웃 에러:', error)
+      console.error('💥 로그아웃 실패:', error)
+      setUser(null) // 강제로 로그아웃
       throw error
     }
   }
