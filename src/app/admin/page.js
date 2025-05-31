@@ -21,47 +21,97 @@ import Header from '../components/Header'
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { user, isAdmin, getAllUsers, getAllOrders, getAllReviews, getSalesStats } = useAuth()
+  const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders, getAllReviews, getSalesStats } = useAuth()
   const [stats, setStats] = useState(null)
+  const [allUsers, setAllUsers] = useState([])
   const [recentOrders, setRecentOrders] = useState([])
   const [recentReviews, setRecentReviews] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // 관리자 권한 확인
-    if (!isAdmin) {
+    // 관리자 권한 체크
+    if (!isAuthenticated) {
+      router.push('/')
+      return
+    }
+
+    if (!isAdmin && user?.role !== 'admin' && user?.email !== 'admin@pretiumsound.com') {
       router.push('/')
       return
     }
 
     // 통계 데이터 로드
-    const salesStats = getSalesStats()
-    const allOrders = getAllOrders()
-    const allReviews = getAllReviews()
-    const allUsers = getAllUsers()
+    loadAdminData()
+  }, [isAuthenticated, isAdmin, user])
 
-    setStats({
-      ...salesStats,
-      totalUsers: allUsers.length,
-      totalReviews: allReviews.length,
-      newUsersThisMonth: allUsers.filter(user => {
-        const joinDate = new Date(user.joinDate)
-        const thisMonth = new Date()
-        thisMonth.setDate(1)
+  const loadAdminData = async () => {
+    setIsLoading(true)
+    
+    try {
+      // 병렬로 모든 데이터 로드
+      const [salesStats, allUsersData, allOrders, allReviews] = await Promise.all([
+        getSalesStats().catch(err => {
+          console.error('Stats 로드 실패:', err)
+          return {
+            totalOrders: 0,
+            totalRevenue: 0,
+            averageOrderValue: 0,
+            thisMonthRevenue: 0,
+            lastMonthRevenue: 0,
+            monthlyGrowth: 0
+          }
+        }),
+        getAllUsers().catch(err => {
+          console.error('Users 로드 실패:', err)
+          return []
+        }),
+        getAllOrders().catch(err => {
+          console.error('Orders 로드 실패:', err)
+          return []
+        }),
+        getAllReviews().catch(err => {
+          console.error('Reviews 로드 실패:', err)
+          return []
+        })
+      ])
+
+      // 사용자 데이터 안전하게 처리
+      const usersArray = Array.isArray(allUsersData) ? allUsersData : []
+      setAllUsers(usersArray)
+
+      // 이번 달 신규 사용자 계산
+      const thisMonth = new Date()
+      thisMonth.setDate(1)
+      const newUsersThisMonth = usersArray.filter(user => {
+        if (!user.created_at) return false
+        const joinDate = new Date(user.created_at)
         return joinDate >= thisMonth
       }).length
-    })
 
-    // 최근 주문 (최대 5개)
-    setRecentOrders(allOrders.slice(0, 5))
+      // 통계 설정
+      setStats({
+        ...salesStats,
+        totalUsers: usersArray.length,
+        totalReviews: Array.isArray(allReviews) ? allReviews.length : 0,
+        newUsersThisMonth
+      })
 
-    // 최근 리뷰 (최대 5개)
-    setRecentReviews(allReviews.slice(0, 5))
+      // 최근 주문 (최대 5개)
+      const ordersArray = Array.isArray(allOrders) ? allOrders : []
+      setRecentOrders(ordersArray.slice(0, 5))
 
-    setIsLoading(false)
-  }, [isAdmin, router, getSalesStats, getAllOrders, getAllReviews, getAllUsers])
+      // 최근 리뷰 (최대 5개)  
+      const reviewsArray = Array.isArray(allReviews) ? allReviews : []
+      setRecentReviews(reviewsArray.slice(0, 5))
 
-  if (!isAdmin) {
+    } catch (error) {
+      console.error('관리자 데이터 로드 실패:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (!isAuthenticated || (!isAdmin && user?.role !== 'admin' && user?.email !== 'admin@pretiumsound.com')) {
     return null
   }
 
@@ -80,7 +130,7 @@ export default function AdminDashboard() {
     return new Intl.NumberFormat('ko-KR', {
       style: 'currency',
       currency: 'KRW'
-    }).format(price)
+    }).format(price || 0)
   }
 
   const getStatusColor = (status) => {
@@ -154,13 +204,13 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="mt-4 flex items-center">
-                {stats?.monthlyGrowth >= 0 ? (
+                {(stats?.monthlyGrowth || 0) >= 0 ? (
                   <ArrowUpRight className="text-green-500" size={16} />
                 ) : (
                   <ArrowDownRight className="text-red-500" size={16} />
                 )}
                 <span className={`text-sm font-medium ${
-                  stats?.monthlyGrowth >= 0 ? 'text-green-600' : 'text-red-600'
+                  (stats?.monthlyGrowth || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                 }`}>
                   {Math.abs(stats?.monthlyGrowth || 0).toFixed(1)}%
                 </span>
@@ -245,11 +295,11 @@ export default function AdminDashboard() {
                     <div key={order.id} className="p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex items-center justify-between mb-2">
                         <div>
-                          <p className="font-medium text-gray-800">{order.customerName}</p>
-                          <p className="text-sm text-gray-600">주문번호: {order.orderNumber}</p>
+                          <p className="font-medium text-gray-800">{order.customerName || '알 수 없음'}</p>
+                          <p className="text-sm text-gray-600">주문번호: #{order.id?.slice(0, 8) || 'N/A'}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-gray-800">{formatPrice(order.totalAmount)}</p>
+                          <p className="font-bold text-gray-800">{formatPrice(order.total_amount)}</p>
                           <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
                             {getStatusLabel(order.status)}
                           </span>
@@ -257,7 +307,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex items-center justify-between text-sm text-gray-500">
                         <span>{order.items?.length || 0}개 상품</span>
-                        <span>{new Date(order.createdAt).toLocaleDateString('ko-KR')}</span>
+                        <span>{new Date(order.created_at).toLocaleDateString('ko-KR')}</span>
                       </div>
                     </div>
                   ))
@@ -292,14 +342,14 @@ export default function AdminDashboard() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2 mb-1">
-                            <p className="font-medium text-gray-800">{review.userName}</p>
+                            <p className="font-medium text-gray-800">{review.userName || '알 수 없음'}</p>
                             <div className="flex">
                               {[...Array(5)].map((_, i) => (
                                 <Star
                                   key={i}
                                   size={14}
                                   className={`${
-                                    i < review.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                                    i < (review.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'
                                   }`}
                                 />
                               ))}
@@ -312,8 +362,8 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>도움이 됨 {review.helpful || 0}</span>
-                        <span>{new Date(review.createdAt).toLocaleDateString('ko-KR')}</span>
+                        <span>도움이 됨 {review.helpful_count || 0}</span>
+                        <span>{new Date(review.created_at).toLocaleDateString('ko-KR')}</span>
                       </div>
                     </div>
                   ))

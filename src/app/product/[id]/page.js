@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
+
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, ShoppingCart, Heart, Star, Plus, Minus, Play, Download, Book, Award, Users, Clock } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
@@ -14,6 +15,9 @@ export default function ProductPage({ params }) {
   const { addToCart } = useCart()
   const { user, isAuthenticated, toggleWishlist, hasPurchasedProduct, hasReviewedProduct, addReview, updateReview, deleteReview, toggleReviewHelpful } = useAuth()
   
+  // Next.js 15에서 params는 Promise이므로 use()로 unwrap
+  const resolvedParams = use(params)
+  
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -26,10 +30,10 @@ export default function ProductPage({ params }) {
   const [reviewSort, setReviewSort] = useState('newest')
 
   useEffect(() => {
-    if (params?.id) {
+    if (resolvedParams?.id) {
       loadProduct()
     }
-  }, [params?.id])
+  }, [resolvedParams?.id])
 
   useEffect(() => {
     if (product) {
@@ -37,12 +41,12 @@ export default function ProductPage({ params }) {
     }
   }, [product])
 
-  const loadProduct = () => {
+  const loadProduct = async () => {  // ✅ async 추가
     setLoading(true)
     setError(null)
     
     try {
-      const productData = getVisibleProductById(params.id)
+      const productData = await getVisibleProductById(resolvedParams.id)  // ✅ await 추가
       if (!productData) {
         setError('상품을 찾을 수 없습니다.')
         return
@@ -58,42 +62,74 @@ export default function ProductPage({ params }) {
 
   const loadReviews = () => {
     if (typeof window !== 'undefined') {
-      const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
-      const productReviews = allReviews.filter(review => review.productId === product.id)
-      
-      // 기본 상품의 리뷰도 포함
-      const defaultReviews = product.reviews || []
-      
-      const combinedReviews = [...defaultReviews, ...productReviews]
-      setReviews(combinedReviews)
+      try {
+        const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
+        const productReviews = allReviews.filter(review => review.productId === product.id)
+        
+        // 기본 상품의 리뷰도 포함
+        const defaultReviews = product.reviews || []
+        
+        const combinedReviews = [...defaultReviews, ...productReviews]
+        setReviews(combinedReviews)
+      } catch (error) {
+        console.warn('리뷰 로드 실패:', error)
+        setReviews(product.reviews || [])
+      }
     }
   }
 
   const handleAddToCart = () => {
-    addToCart({ ...product, quantity })
-    // 성공 알림 등을 추가할 수 있음
+    if (!product) return
+    
+    try {
+      addToCart({ 
+        ...product, 
+        quantity,
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        category: product.category,
+        icon: product.icon
+      })
+      alert('장바구니에 추가되었습니다!')
+    } catch (error) {
+      console.error('장바구니 추가 실패:', error)
+      alert('장바구니 추가에 실패했습니다.')
+    }
   }
 
-  const handleWishlistToggle = () => {
+  const handleWishlistToggle = async () => {
     if (!isAuthenticated) {
       alert('로그인이 필요한 서비스입니다.')
       return
     }
-    toggleWishlist(product.id)
+    
+    try {
+      await toggleWishlist(product.id)
+    } catch (error) {
+      console.error('위시리스트 토글 실패:', error)
+      alert('위시리스트 업데이트에 실패했습니다.')
+    }
   }
 
   const handleReviewSubmit = async (reviewData, isEdit = false) => {
     try {
-      if (isEdit) {
-        updateReview(reviewData.id, reviewData)
+      if (isEdit && editingReview) {
+        await updateReview(editingReview.id, reviewData)
       } else {
-        addReview(reviewData)
+        await addReview({
+          ...reviewData,
+          product_id: product.id,
+          productId: product.id // localStorage용 호환성
+        })
       }
       loadReviews()
       setIsReviewModalOpen(false)
       setEditingReview(null)
+      alert(isEdit ? '리뷰가 수정되었습니다!' : '리뷰가 작성되었습니다!')
     } catch (error) {
-      throw new Error(error.message)
+      console.error('리뷰 처리 실패:', error)
+      throw new Error(error.message || (isEdit ? '리뷰 수정에 실패했습니다.' : '리뷰 작성에 실패했습니다.'))
     }
   }
 
@@ -102,24 +138,35 @@ export default function ProductPage({ params }) {
     setIsReviewModalOpen(true)
   }
 
-  const handleReviewDelete = (reviewId) => {
-    if (window.confirm('리뷰를 삭제하시겠습니까?')) {
-      deleteReview(reviewId)
+  const handleReviewDelete = async (reviewId) => {
+    if (!window.confirm('리뷰를 삭제하시겠습니까?')) return
+    
+    try {
+      await deleteReview(reviewId)
       loadReviews()
+      alert('리뷰가 삭제되었습니다.')
+    } catch (error) {
+      console.error('리뷰 삭제 실패:', error)
+      alert('리뷰 삭제에 실패했습니다.')
     }
   }
 
-  const handleReviewHelpful = (reviewId) => {
+  const handleReviewHelpful = async (reviewId) => {
     if (!isAuthenticated) {
       alert('로그인이 필요한 서비스입니다.')
       return
     }
-    toggleReviewHelpful(reviewId)
-    loadReviews()
+    
+    try {
+      await toggleReviewHelpful(reviewId)
+      loadReviews()
+    } catch (error) {
+      console.error('리뷰 도움됨 토글 실패:', error)
+    }
   }
 
   const getFilteredReviews = () => {
-    let filtered = reviews
+    let filtered = [...reviews]
 
     // 평점 필터
     if (reviewFilter !== 'all') {
@@ -129,19 +176,19 @@ export default function ProductPage({ params }) {
     // 정렬
     switch (reviewSort) {
       case 'newest':
-        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        filtered.sort((a, b) => new Date(b.createdAt || b.created_at || Date.now()) - new Date(a.createdAt || a.created_at || Date.now()))
         break
       case 'oldest':
-        filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        filtered.sort((a, b) => new Date(a.createdAt || a.created_at || Date.now()) - new Date(b.createdAt || b.created_at || Date.now()))
         break
       case 'rating-high':
-        filtered.sort((a, b) => b.rating - a.rating)
+        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
         break
       case 'rating-low':
-        filtered.sort((a, b) => a.rating - b.rating)
+        filtered.sort((a, b) => (a.rating || 0) - (b.rating || 0))
         break
       case 'helpful':
-        filtered.sort((a, b) => (b.helpful || 0) - (a.helpful || 0))
+        filtered.sort((a, b) => (b.helpful_count || b.helpful || 0) - (a.helpful_count || a.helpful || 0))
         break
       default:
         break
@@ -160,13 +207,14 @@ export default function ProductPage({ params }) {
     }
 
     const total = reviews.length
-    const sum = reviews.reduce((acc, review) => acc + review.rating, 0)
-    const average = sum / total
+    const sum = reviews.reduce((acc, review) => acc + (review.rating || 0), 0)
+    const average = total > 0 ? sum / total : 0
 
     const distribution = [0, 0, 0, 0, 0]
     reviews.forEach(review => {
-      if (review.rating >= 1 && review.rating <= 5) {
-        distribution[review.rating - 1]++
+      const rating = review.rating || 0
+      if (rating >= 1 && rating <= 5) {
+        distribution[rating - 1]++
       }
     })
 
@@ -174,6 +222,7 @@ export default function ProductPage({ params }) {
   }
 
   const formatPrice = (price) => {
+    if (!price) return '₩0'
     if (typeof price === 'string') return price
     return `₩${price.toLocaleString()}`
   }
@@ -217,8 +266,8 @@ export default function ProductPage({ params }) {
   }
 
   const isInWishlist = user?.wishlist?.includes(product.id) || false
-  const isPurchased = hasPurchasedProduct(product.id)
-  const hasReviewed = hasReviewedProduct(product.id)
+  const isPurchased = hasPurchasedProduct && hasPurchasedProduct(product.id)
+  const hasReviewed = hasReviewedProduct && hasReviewedProduct(product.id)
   const ratingStats = getRatingStats()
   const filteredReviews = getFilteredReviews()
 
@@ -397,7 +446,7 @@ export default function ProductPage({ params }) {
               {activeTab === 'description' && (
                 <div className="prose max-w-none">
                   <p className="text-gray-700 leading-relaxed text-lg">
-                    {product.detailedDescription || product.description}
+                    {product.detailedDescription || product.description || '이 교재는 음악 학습을 위한 전문적인 콘텐츠를 제공합니다. 체계적인 커리큘럼을 통해 단계별로 실력을 향상시킬 수 있으며, 다양한 예제와 연습 문제를 통해 실전 능력을 기를 수 있습니다.'}
                   </p>
                 </div>
               )}
@@ -418,7 +467,23 @@ export default function ProductPage({ params }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500">등록된 특징이 없습니다.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[
+                        '고품질 음원 및 악보 제공',
+                        '단계별 학습 커리큘럼',
+                        '전문가의 상세한 해설',
+                        '다양한 연습 예제 포함',
+                        '온라인 보조 자료 제공',
+                        '평생 무료 업데이트'
+                      ].map((feature, index) => (
+                        <div key={index} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+                          <div className="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mt-0.5">
+                            {index + 1}
+                          </div>
+                          <p className="text-gray-700 flex-1">{feature}</p>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -441,7 +506,25 @@ export default function ProductPage({ params }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-gray-500">등록된 목차가 없습니다.</p>
+                    <div className="space-y-3">
+                      {[
+                        '기본 이론 및 개념 소개',
+                        '기초 연습 및 테크닉',
+                        '중급 레벨 학습 과정',
+                        '고급 기법 및 응용',
+                        '실전 연습 프로젝트',
+                        '보너스 자료 및 팁'
+                      ].map((content, index) => (
+                        <div key={index} className="flex items-start space-x-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                          <div className="bg-indigo-100 text-indigo-800 rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-gray-800">{content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -534,16 +617,18 @@ export default function ProductPage({ params }) {
                   {/* 리뷰 목록 */}
                   {filteredReviews.length > 0 ? (
                     <div className="space-y-6">
-                      {filteredReviews.map((review) => (
-                        <div key={review.id} className="border border-gray-200 rounded-lg p-6">
+                      {filteredReviews.map((review, index) => (
+                        <div key={review.id || index} className="border border-gray-200 rounded-lg p-6">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center space-x-3">
                               <div className="w-10 h-10 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold">
-                                {review.userName.charAt(0)}
+                                {(review.userName || review.user_name || '사용자').charAt(0)}
                               </div>
                               <div>
                                 <div className="flex items-center space-x-2">
-                                  <span className="font-semibold text-gray-800">{review.userName}</span>
+                                  <span className="font-semibold text-gray-800">
+                                    {review.userName || review.user_name || '사용자'}
+                                  </span>
                                   {review.verified && (
                                     <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
                                       구매 인증
@@ -551,15 +636,15 @@ export default function ProductPage({ params }) {
                                   )}
                                 </div>
                                 <div className="flex items-center space-x-2">
-                                  <StarRating rating={review.rating} size={16} />
+                                  <StarRating rating={review.rating || 0} size={16} />
                                   <span className="text-sm text-gray-500">
-                                    {new Date(review.createdAt).toLocaleDateString('ko-KR')}
+                                    {new Date(review.createdAt || review.created_at || Date.now()).toLocaleDateString('ko-KR')}
                                   </span>
                                 </div>
                               </div>
                             </div>
                             
-                            {user && user.id === review.userId && (
+                            {user && (user.id === review.userId || user.id === review.user_id) && (
                               <div className="flex space-x-2">
                                 <button
                                   onClick={() => handleReviewEdit(review)}
@@ -585,11 +670,11 @@ export default function ProductPage({ params }) {
                           
                           {review.photos && review.photos.length > 0 && (
                             <div className="flex space-x-2 mb-4">
-                              {review.photos.map((photo) => (
+                              {review.photos.map((photo, photoIndex) => (
                                 <img
-                                  key={photo.id}
+                                  key={photo.id || photoIndex}
                                   src={photo.url}
-                                  alt={photo.name}
+                                  alt={photo.name || `리뷰 이미지 ${photoIndex + 1}`}
                                   className="w-20 h-20 object-cover rounded-lg border border-gray-200"
                                 />
                               ))}
@@ -602,7 +687,9 @@ export default function ProductPage({ params }) {
                               className="flex items-center space-x-1 text-gray-600 hover:text-indigo-600 transition-colors"
                             >
                               <span className="text-sm">도움이 됨</span>
-                              <span className="text-sm font-medium">{review.helpful || 0}</span>
+                              <span className="text-sm font-medium">
+                                {review.helpful_count || review.helpful || 0}
+                              </span>
                             </button>
                           </div>
                         </div>
@@ -630,17 +717,19 @@ export default function ProductPage({ params }) {
       </div>
 
       {/* 리뷰 작성 모달 */}
-      <ReviewModal
-        isOpen={isReviewModalOpen}
-        onClose={() => {
-          setIsReviewModalOpen(false)
-          setEditingReview(null)
-        }}
-        product={product}
-        user={user}
-        onSubmitReview={handleReviewSubmit}
-        editingReview={editingReview}
-      />
+      {ReviewModal && (
+        <ReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => {
+            setIsReviewModalOpen(false)
+            setEditingReview(null)
+          }}
+          product={product}
+          user={user}
+          onSubmitReview={handleReviewSubmit}
+          editingReview={editingReview}
+        />
+      )}
     </div>
   )
 }

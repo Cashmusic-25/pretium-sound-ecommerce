@@ -74,29 +74,46 @@ const initialState = {
   items: []
 }
 
+// localStorage 안전 함수들
+const safeGetFromStorage = (key) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const item = localStorage.getItem(key)
+      return item ? JSON.parse(item) : null
+    }
+  } catch (error) {
+    console.warn('localStorage 읽기 실패:', error)
+  }
+  return null
+}
+
+const safeSetToStorage = (key, value) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(key, JSON.stringify(value))
+    }
+  } catch (error) {
+    console.warn('localStorage 저장 실패:', error)
+  }
+}
+
 // CartProvider 컴포넌트
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState)
 
-  // 로컬 스토리지에서 장바구니 불러오기 (브라우저에서만)
+  // 컴포넌트 마운트 시 로컬 스토리지에서 장바구니 불러오기
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedCart = localStorage.getItem('cart')
-      if (savedCart) {
-        try {
-          const parsedCart = JSON.parse(savedCart)
-          dispatch({ type: CART_ACTIONS.LOAD_CART, payload: parsedCart })
-        } catch (error) {
-          console.error('장바구니 데이터 로드 실패:', error)
-        }
-      }
+    const savedCart = safeGetFromStorage('cart')
+    if (savedCart && Array.isArray(savedCart)) {
+      dispatch({ type: CART_ACTIONS.LOAD_CART, payload: savedCart })
     }
   }, [])
 
-  // 장바구니 변경시 로컬 스토리지에 저장
+  // 장바구니 변경시 로컬 스토리지에 저장 (가능한 경우에만)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('cart', JSON.stringify(state.items))
+    // 초기 로드가 아닌 실제 변경사항만 저장
+    if (state.items.length > 0 || typeof window !== 'undefined') {
+      safeSetToStorage('cart', state.items)
     }
   }, [state.items])
 
@@ -125,9 +142,23 @@ export function CartProvider({ children }) {
   // 총 가격 계산 (원화 문자열 제거 후 계산)
   const getTotalPrice = () => {
     return state.items.reduce((total, item) => {
-      const price = parseInt(item.price.replace(/[₩,]/g, ''))
+      // 가격이 문자열인 경우와 숫자인 경우 모두 처리
+      let price = typeof item.price === 'string' 
+        ? parseInt(item.price.replace(/[₩,]/g, '')) || 0
+        : item.price || 0
       return total + (price * item.quantity)
     }, 0)
+  }
+
+  // 특정 상품이 장바구니에 있는지 확인
+  const isInCart = (productId) => {
+    return state.items.some(item => item.id === productId)
+  }
+
+  // 특정 상품의 수량 가져오기
+  const getItemQuantity = (productId) => {
+    const item = state.items.find(item => item.id === productId)
+    return item ? item.quantity : 0
   }
 
   // 컨텍스트 값
@@ -138,7 +169,9 @@ export function CartProvider({ children }) {
     updateQuantity,
     clearCart,
     getTotalItems,
-    getTotalPrice
+    getTotalPrice,
+    isInCart,
+    getItemQuantity
   }
 
   return (

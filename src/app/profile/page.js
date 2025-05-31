@@ -40,19 +40,23 @@ export default function ProfilePage() {
     }))
   }
 
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     if (!editForm.name.trim() || !editForm.email.trim()) {
       alert('이름과 이메일을 모두 입력해주세요.')
       return
     }
 
-    updateUser({
-      name: editForm.name.trim(),
-      email: editForm.email.trim()
-    })
-
-    setIsEditing(false)
-    alert('프로필이 업데이트되었습니다!')
+    try {
+      await updateUser({
+        name: editForm.name.trim(),
+        email: editForm.email.trim()
+      })
+      setIsEditing(false)
+      alert('프로필이 업데이트되었습니다!')
+    } catch (error) {
+      console.error('프로필 업데이트 실패:', error)
+      alert('프로필 업데이트에 실패했습니다.')
+    }
   }
 
   const handleCancelEdit = () => {
@@ -65,11 +69,11 @@ export default function ProfilePage() {
 
   const calculateUserLevel = () => {
     const orders = user?.orders || []
-    const totalSpent = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0)
+    const totalSpent = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
     
     if (totalSpent >= 200000) return { level: 'VIP', color: 'text-purple-600', bg: 'bg-purple-100', next: null }
-    if (totalSpent >= 100000) return { level: 'Gold', color: 'text-yellow-600', bg: 'bg-yellow-100', next: '200,000원까지 80,000원 남음' }
-    if (totalSpent >= 50000) return { level: 'Silver', color: 'text-gray-600', bg: 'bg-gray-100', next: '100,000원까지 50,000원 남음' }
+    if (totalSpent >= 100000) return { level: 'Gold', color: 'text-yellow-600', bg: 'bg-yellow-100', next: '200,000원까지 ' + (200000 - totalSpent).toLocaleString() + '원 남음' }
+    if (totalSpent >= 50000) return { level: 'Silver', color: 'text-gray-600', bg: 'bg-gray-100', next: '100,000원까지 ' + (100000 - totalSpent).toLocaleString() + '원 남음' }
     return { level: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-100', next: '50,000원까지 ' + (50000 - totalSpent).toLocaleString() + '원 남음' }
   }
 
@@ -79,10 +83,10 @@ export default function ProfilePage() {
     
     return {
       totalOrders: orders.length,
-      totalSpent: orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+      totalSpent: orders.reduce((sum, order) => sum + (order.total_amount || 0), 0),
       wishlistItems: wishlist.length,
       cartItems: getTotalItems(),
-      joinDate: user?.joinDate ? new Date(user.joinDate).toLocaleDateString('ko-KR') : '정보 없음'
+      joinDate: user?.created_at ? new Date(user.created_at).toLocaleDateString('ko-KR') : '정보 없음'
     }
   }
 
@@ -122,11 +126,7 @@ export default function ProfilePage() {
                 {/* 프로필 헤더 */}
                 <div className="text-center mb-8">
                   <div className="relative inline-block">
-                    <img
-                      src={user.avatar}
-                      alt={user.name}
-                      className="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-indigo-100"
-                    />
+                    <Avatar name={user.name} size={96} className="mx-auto mb-4 border-4 border-indigo-100" />
                     <div className={`absolute -bottom-2 -right-2 ${userLevel.bg} ${userLevel.color} px-2 py-1 rounded-full text-xs font-bold`}>
                       {userLevel.level}
                     </div>
@@ -163,7 +163,9 @@ export default function ProfilePage() {
                           value={editForm.email}
                           onChange={(e) => handleInputChange('email', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                          disabled
                         />
+                        <p className="text-xs text-gray-500 mt-1">이메일은 변경할 수 없습니다.</p>
                       </div>
                       
                       <div className="flex space-x-2">
@@ -315,14 +317,14 @@ export default function ProfilePage() {
                     {user.orders?.slice(0, 3).map((order) => (
                       <div key={order.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                         <div>
-                          <p className="font-medium text-gray-800">주문번호: {order.orderNumber}</p>
+                          <p className="font-medium text-gray-800">주문번호: #{order.id?.slice(0, 8) || 'N/A'}</p>
                           <p className="text-sm text-gray-600">
-                            {new Date(order.createdAt).toLocaleDateString('ko-KR')}
+                            {new Date(order.created_at).toLocaleDateString('ko-KR')}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-indigo-600">₩{order.totalAmount.toLocaleString()}</p>
-                          <p className="text-sm text-gray-600">{order.items.length}개 상품</p>
+                          <p className="font-bold text-indigo-600">₩{(order.total_amount || 0).toLocaleString()}</p>
+                          <p className="text-sm text-gray-600">{order.items?.length || 0}개 상품</p>
                         </div>
                       </div>
                     ))}

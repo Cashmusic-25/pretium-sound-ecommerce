@@ -51,12 +51,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
       }
     }
 
-    // 이메일 형식 검증
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      setError('올바른 이메일 형식을 입력해주세요.')
-      return false
-    }
+    // 이메일 검증은 HTML input type="email"에 맡김
 
     return true
   }
@@ -71,8 +66,14 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     try {
       if (mode === 'login') {
+        console.log('로그인 시도:', formData.email)
         await login(formData.email, formData.password)
       } else {
+        console.log('회원가입 시도:', {
+          name: formData.name,
+          email: formData.email,
+          password: '***hidden***'
+        })
         await signup({
           name: formData.name,
           email: formData.email,
@@ -84,6 +85,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
       onClose()
       resetForm()
     } catch (err) {
+      console.error('인증 에러:', err)
       setError(err.message)
     } finally {
       setIsLoading(false)
