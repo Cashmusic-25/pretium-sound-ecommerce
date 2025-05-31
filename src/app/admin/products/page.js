@@ -15,7 +15,6 @@ import {
   DollarSign
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { products } from '../../../data/products.js'
 import Header from '../../components/Header'
 
 export default function AdminProductsPage() {
@@ -34,24 +33,30 @@ export default function AdminProductsPage() {
       router.push('/')
       return
     }
-
-    // 상품 목록 로드 (로컬 스토리지 + 기본 상품 데이터 + 오버라이드 - 숨겨진 상품)
-    const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-    const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-    const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
-    
-    // 기본 상품에 오버라이드 적용하고 숨겨진 상품 제외
-    const updatedBaseProducts = products
-      .filter(product => !hiddenProducts.includes(product.id))
-      .map(product => ({
-        ...product,
-        ...productOverrides[product.id]
-      }))
-    
-    const allProducts = [...updatedBaseProducts, ...savedProducts]
-    setProductList(allProducts)
-    setFilteredProducts(allProducts)
-    setIsLoading(false)
+  
+    // Supabase에서 상품 목록 로드
+    const loadProducts = async () => {
+      try {
+        setIsLoading(true)
+        
+        // productHelpers에서 getAllVisibleProducts 사용
+        const { getAllVisibleProducts } = await import('@/data/productHelpers')
+        const products = await getAllVisibleProducts()
+        
+        console.log('📦 관리자 페이지 - 로드된 상품:', products.length, '개')
+        
+        setProductList(products)
+        setFilteredProducts(products)
+      } catch (error) {
+        console.error('상품 로드 실패:', error)
+        setProductList([])
+        setFilteredProducts([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  
+    loadProducts()
   }, [isAdmin, router])
 
   // 검색 및 필터링

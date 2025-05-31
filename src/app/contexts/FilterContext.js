@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useState, useMemo, useEffect } from 'react'
-import { products } from '../../data/products'
 
 const FilterContext = createContext()
 
@@ -11,43 +10,53 @@ export function FilterProvider({ children }) {
   const [priceRange, setPriceRange] = useState([0, 100000])
   const [sortBy, setSortBy] = useState('default')
   const [isClient, setIsClient] = useState(false)
+  const [products, setProducts] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
 
   // 클라이언트 사이드 hydration 완료 체크
   useEffect(() => {
     setIsClient(true)
   }, [])
 
-  // 실제 보이는 상품 목록 가져오기 (숨겨진 상품 제외 + 오버라이드 적용)
-  const getVisibleProducts = useMemo(() => {
-    // 서버 사이드에서는 기본 상품만 반환
-    if (!isClient) {
-      return products
+  // Supabase에서 상품 데이터 로드
+  useEffect(() => {
+    const loadProducts = async () => {
+      if (!isClient) return
+      
+      try {
+        setIsLoading(true)
+        
+        // productHelpers에서 getAllVisibleProducts 사용
+        const { getAllVisibleProducts } = await import('../../data/productHelpers')
+        const supabaseProducts = await getAllVisibleProducts()
+        
+        console.log('🏠 홈페이지 - 로드된 상품:', supabaseProducts.length, '개')
+        
+        setProducts(supabaseProducts)
+      } catch (error) {
+        console.error('상품 로드 실패:', error)
+        setProducts([])
+      } finally {
+        setIsLoading(false)
+      }
     }
 
-    const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-    const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-    const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
-    
-    // 기본 상품에 오버라이드 적용하고 숨겨진 상품 제외
-    const updatedBaseProducts = products
-      .filter(product => !hiddenProducts.includes(product.id))
-      .map(product => ({
-        ...product,
-        ...productOverrides[product.id]
-      }))
-    
-    return [...updatedBaseProducts, ...savedProducts]
+    loadProducts()
   }, [isClient])
 
-  // 카테고리 목록 추출 (보이는 상품들로만)
+  // 카테고리 목록 추출
   const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(getVisibleProducts.map(product => product.category))]
+    const uniqueCategories = [...new Set(products.map(product => product.category))]
     return ['all', ...uniqueCategories]
-  }, [getVisibleProducts])
+  }, [products])
 
   // 필터링된 상품 목록
   const filteredProducts = useMemo(() => {
-    let filtered = [...getVisibleProducts]
+    if (isLoading || !isClient) {
+      return []
+    }
+
+    let filtered = [...products]
 
     // 검색어로 필터링
     if (searchTerm) {
@@ -65,7 +74,9 @@ export function FilterProvider({ children }) {
 
     // 가격 범위로 필터링
     filtered = filtered.filter(product => {
-      const price = parseInt(product.price.replace(/[₩,]/g, ''))
+      const price = typeof product.price === 'string' 
+        ? parseInt(product.price.replace(/[₩,]/g, ''))
+        : product.price
       return price >= priceRange[0] && price <= priceRange[1]
     })
 
@@ -73,15 +84,23 @@ export function FilterProvider({ children }) {
     switch (sortBy) {
       case 'price-low':
         filtered.sort((a, b) => {
-          const priceA = parseInt(a.price.replace(/[₩,]/g, ''))
-          const priceB = parseInt(b.price.replace(/[₩,]/g, ''))
+          const priceA = typeof a.price === 'string' 
+            ? parseInt(a.price.replace(/[₩,]/g, ''))
+            : a.price
+          const priceB = typeof b.price === 'string'
+            ? parseInt(b.price.replace(/[₩,]/g, ''))
+            : b.price
           return priceA - priceB
         })
         break
       case 'price-high':
         filtered.sort((a, b) => {
-          const priceA = parseInt(a.price.replace(/[₩,]/g, ''))
-          const priceB = parseInt(b.price.replace(/[₩,]/g, ''))
+          const priceA = typeof a.price === 'string'
+            ? parseInt(a.price.replace(/[₩,]/g, ''))
+            : a.price
+          const priceB = typeof b.price === 'string'
+            ? parseInt(b.price.replace(/[₩,]/g, ''))
+            : b.price
           return priceB - priceA
         })
         break
@@ -89,16 +108,17 @@ export function FilterProvider({ children }) {
         filtered.sort((a, b) => a.title.localeCompare(b.title))
         break
       case 'popular':
-        // 임시로 ID 역순으로 정렬 (인기순 가정)
+        // ID 역순으로 정렬 (최신순)
         filtered.sort((a, b) => b.id - a.id)
         break
       default:
-        // 기본 순서 유지
+        // 기본 순서 유지 (최신순)
+        filtered.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
         break
     }
 
     return filtered
-  }, [getVisibleProducts, searchTerm, selectedCategory, priceRange, sortBy])
+  }, [products, searchTerm, selectedCategory, priceRange, sortBy, isLoading, isClient])
 
   // 필터 초기화
   const resetFilters = () => {
@@ -120,9 +140,10 @@ export function FilterProvider({ children }) {
     categories,
     filteredProducts,
     resetFilters,
-    totalProducts: getVisibleProducts.length,
+    totalProducts: products.length,
     filteredCount: filteredProducts.length,
-    isClient // 클라이언트 상태 추가
+    isClient,
+    isLoading
   }
 
   return (

@@ -43,20 +43,14 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // 관리자 권한 체크
-    if (!isAuthenticated) {
+    if (!isAdmin) {
       router.push('/')
       return
     }
-
-    if (!isAdmin && user?.role !== 'admin' && user?.email !== 'admin@pretiumsound.com') {
-      router.push('/')
-      return
-    }
-
-    // 통계 데이터 로드
+  
+    // 관리자 데이터 로드
     loadAdminData()
-  }, [isAuthenticated, isAdmin, user])
+  }, [isAdmin, router])
 
   const loadAdminData = async () => {
     setIsLoading(true)

@@ -338,14 +338,14 @@ export async function getUserStats() {
     const supabase = await getSupabase()
     if (!supabase) {
       return {
-        totalUsers: 156,
-        monthlyUsers: 23,
-        userGrowth: 15.2
+        totalUsers: 0,
+        monthlyUsers: 0,
+        userGrowth: 0
       }
     }
 
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')  // user_profiles 대신 users 테이블 사용
       .select('id, created_at')
 
     if (error) {
@@ -364,6 +364,8 @@ export async function getUserStats() {
     const monthlyUsers = data?.filter(user => 
       new Date(user.created_at) >= thisMonth
     ).length || 0
+
+    console.log('✅ 사용자 통계 업데이트:', { totalUsers, monthlyUsers })
 
     return {
       totalUsers,

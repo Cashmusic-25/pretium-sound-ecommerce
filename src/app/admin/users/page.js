@@ -43,11 +43,64 @@ export default function AdminUsersPage() {
     loadUsers()
   }, [isAdmin, router])
 
-  const loadUsers = () => {
-    const allUsers = getAllUsers()
-    setUsers(allUsers)
-    setFilteredUsers(allUsers)
-    setIsLoading(false)
+  const loadUsers = async () => {
+    try {
+      setIsLoading(true)
+      
+      // Supabase에서 직접 사용자 데이터 가져오기
+      const { getSupabase } = await import('@/lib/supabase')
+      const supabase = getSupabase()
+      
+      if (!supabase) {
+        console.error('Supabase 연결 실패')
+        setUsers([])
+        setFilteredUsers([])
+        return
+      }
+  
+      console.log('👥 사용자 데이터 로드 시작...')
+  
+      // users 테이블에서 모든 사용자 가져오기
+      const { data: usersData, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+  
+      if (error) {
+        console.error('사용자 데이터 로드 실패:', error)
+        setUsers([])
+        setFilteredUsers([])
+        return
+      }
+  
+      console.log('✅ 로드된 사용자 데이터:', usersData.length, '명')
+      console.log('📋 사용자 목록:', usersData)
+  
+      // 데이터 형식 변환 (기존 코드와 호환되도록)
+      const formattedUsers = usersData.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role || 'user',
+        joinDate: user.created_at,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at,
+        wishlist: user.wishlist || [],
+        // 임시 데이터 (나중에 실제 orders, reviews 테이블과 연결)
+        orders: [],
+        reviews: []
+      }))
+  
+      setUsers(formattedUsers)
+      setFilteredUsers(formattedUsers)
+      
+    } catch (error) {
+      console.error('사용자 로드 중 오류:', error)
+      setUsers([])
+      setFilteredUsers([])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // 검색 및 필터링
