@@ -52,19 +52,41 @@ export function AuthProvider({ children }) {
     try {
       setLoading(true)
       console.log('🔐 로그인 시도:', email)
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      console.log('🔧 Supabase auth object:', supabase.auth)
+      console.log('🔧 signInWithPassword type:', typeof supabase.auth.signInWithPassword)
+  
+      // Supabase auth 메서드 확인
+      if (!supabase || !supabase.auth) {
+        throw new Error('Supabase client not available')
+      }
+  
+      if (typeof supabase.auth.signInWithPassword !== 'function') {
+        console.error('❌ signInWithPassword is not a function:', typeof supabase.auth.signInWithPassword)
+        throw new Error('signInWithPassword method not available')
+      }
+  
+      // 안전한 호출
+      const result = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
       })
-
+  
+      console.log('📤 Auth result:', result)
+  
+      const { data, error } = result
+  
       if (error) {
         console.error('로그인 오류:', error)
         throw error
       }
-
+  
+      if (!data || !data.user) {
+        throw new Error('No user data received')
+      }
+  
       console.log('✅ 로그인 성공:', data.user.email)
       return { user: data.user, error: null }
+  
     } catch (error) {
       console.error('인증 에러:', error)
       return { user: null, error }
