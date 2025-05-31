@@ -15,8 +15,48 @@ import {
   Image as ImageIcon,
   Camera
 } from 'lucide-react'
-import { useAuth } from '../../../contexts/AuthContext'
-import Header from '../../../components/Header'
+import { useAuth } from '../../../contexts/AuthContext'  // 상대경로로 복구
+import { supabase } from '../../../lib/supabase'          // supabase import 추가
+import Header from '../../../components/Header'           // 상대경로로 복구
+
+// 이미지 업로드 함수 (임시로 파일 내부에 정의)
+async function uploadProductImage(file) {
+  console.log('🔄 이미지 업로드 시작:', file.name, file.size);
+  
+  try {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
+    const filePath = `products/${fileName}`
+    
+    console.log('📁 파일 경로:', filePath);
+
+    const { data, error } = await supabase.storage
+      .from('product-images')
+      .upload(filePath, file)
+
+    console.log('📤 업로드 결과 - data:', data);
+    console.log('❌ 업로드 결과 - error:', error);
+
+    if (error) {
+      console.error('🚨 이미지 업로드 실패:', error)
+      throw error
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(filePath)
+
+    console.log('✅ 생성된 공개 URL:', publicUrl);
+
+    return {
+      url: publicUrl,
+      path: filePath
+    }
+  } catch (error) {
+    console.error('💥 이미지 업로드 에러:', error)
+    throw error
+  }
+}
 
 export default function AdminProductAddPage() {
   const router = useRouter()
@@ -37,8 +77,9 @@ export default function AdminProductAddPage() {
     detailedDescription: '',
     price: '',
     icon: '🎵',
-    image: null,
-    imagePreview: null,
+    image: null,        // Supabase URL
+    imagePath: null,    // 추가: Supabase 파일 경로
+    imagePreview: null, // 미리보기 URL
     category: '',
     features: [''],
     contents: [''],
@@ -94,36 +135,86 @@ export default function AdminProductAddPage() {
     if (success) setSuccess('')
   }
 
-  // 이미지 업로드 핸들러
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // 파일 크기 체크 (5MB 제한)
-    const maxSize = 5 * 1024 * 1024
-    if (file.size > maxSize) {
-      setError('이미지 크기는 5MB 이하만 가능합니다.')
-      return
-    }
-
-    // 파일 타입 체크
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
-      return
-    }
-
-    // 파일을 Base64로 변환해서 저장
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      setProductForm(prev => ({
-        ...prev,
-        image: e.target.result,
-        imagePreview: e.target.result
-      }))
-    }
-    reader.readAsDataURL(file)
+// handleImageUpload 함수를 이것으로 교체 (디버깅 로그 포함)
+const handleImageUpload = async (e) => {
+  console.log('🖼️ 이미지 업로드 핸들러 시작');
+  
+  const file = e.target.files[0]
+  if (!file) {
+    console.log('❌ 파일이 선택되지 않음');
+    return;
   }
+
+  console.log('📁 선택된 파일:', file.name, file.type, file.size);
+
+  // 파일 크기 체크 (5MB 제한)
+  const maxSize = 5 * 1024 * 1024
+  if (file.size > maxSize) {
+    console.log('❌ 파일 크기 초과:', file.size);
+    setError('이미지 크기는 5MB 이하만 가능합니다.')
+    return
+  }
+
+  // 파일 타입 체크
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+  if (!allowedTypes.includes(file.type)) {
+    console.log('❌ 파일 타입 불일치:', file.type);
+    setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
+    return
+  }
+
+  console.log('✅ 파일 검증 통과');
+
+  // 업로드 진행상태 표시
+  setIsLoading(true)
+  setError('')
+  setSuccess('')
+
+  try {
+    console.log('🔄 미리보기 URL 생성 중...');
+    // 미리보기 URL 생성 (즉시 표시용)
+    const previewUrl = URL.createObjectURL(file)
+    console.log('🖼️ 미리보기 URL:', previewUrl);
+    
+    setProductForm(prev => ({
+      ...prev,
+      imagePreview: previewUrl
+    }))
+
+    console.log('☁️ Supabase Storage 업로드 시작...');
+    // uploadProductImage 함수 확인
+    console.log('🔧 uploadProductImage 함수:', typeof uploadProductImage);
+    
+    // Supabase Storage에 업로드
+    const result = await uploadProductImage(file)
+    console.log('✅ 업로드 성공:', result);
+    
+    // 실제 업로드된 URL로 업데이트
+    setProductForm(prev => ({
+      ...prev,
+      image: result.url, // 실제 Supabase URL
+      imagePath: result.path, // 삭제용 경로
+      imagePreview: result.url
+    }))
+
+    setSuccess('이미지 업로드 완료!')
+    console.log('🎉 이미지 업로드 완료:', result.url);
+    
+  } catch (error) {
+    console.error('💥 이미지 업로드 실패:', error);
+    setError('이미지 업로드 실패: ' + error.message)
+    // 실패 시 미리보기 제거
+    setProductForm(prev => ({
+      ...prev,
+      image: null,
+      imagePreview: null,
+      imagePath: null
+    }))
+  } finally {
+    setIsLoading(false)
+    console.log('🏁 이미지 업로드 프로세스 완료');
+  }
+}
 
   // 이미지 제거 핸들러
   const handleRemoveImage = () => {
@@ -438,6 +529,7 @@ export default function AdminProductAddPage() {
                           accept="image/jpeg,image/jpg,image/png,image/webp"
                           onChange={handleImageUpload}
                           className="hidden"
+                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
                         />
                       </label>
                     ) : (
@@ -451,12 +543,24 @@ export default function AdminProductAddPage() {
                           type="button"
                           onClick={handleRemoveImage}
                           className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
+                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
                         >
                           <X size={16} />
                         </button>
-                        <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
-                          이미지 업로드됨
-                        </div>
+                        
+                        {/* 추가: 업로드 진행상태 표시 */}
+                        {isLoading ? (
+                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                            <div className="text-white text-center">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                              <p>업로드 중...</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="absolute bottom-2 left-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
+                            ✅ 업로드 완료
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
