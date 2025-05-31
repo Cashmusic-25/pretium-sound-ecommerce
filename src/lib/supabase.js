@@ -1,22 +1,28 @@
-// 프로덕션 환경에서 안전한 Supabase 클라이언트
+// src/lib/supabase.js - 프로덕션 안전한 버전
+
+import { createClient } from '@supabase/supabase-js'
 
 let supabaseInstance = null
-let initializationPromise = null
 
-const createSupabaseClient = async () => {
+const createSupabaseClient = () => {
   try {
     // 환경 변수 확인
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+    console.log('🔧 Supabase 환경변수 체크:', {
+      url: supabaseUrl ? '설정됨' : '없음',
+      key: supabaseKey ? '설정됨' : '없음',
+      env: process.env.NODE_ENV
+    })
+
     if (!supabaseUrl || !supabaseKey) {
       console.error('❌ Supabase 환경 변수가 설정되지 않았습니다.')
-      throw new Error('Missing Supabase environment variables')
+      console.error('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl)
+      console.error('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseKey ? '[설정됨]' : '[없음]')
+      return null
     }
 
-    // 동적 import 사용 (프로덕션에서 안전)
-    const { createClient } = await import('@supabase/supabase-js')
-    
     console.log('🔧 Supabase 클라이언트 생성 중...')
 
     const client = createClient(supabaseUrl, supabaseKey, {
@@ -42,13 +48,14 @@ const createSupabaseClient = async () => {
 
   } catch (error) {
     console.error('💥 Supabase 클라이언트 생성 실패:', error)
-    throw error
+    return null
   }
 }
 
-export const getSupabase = async () => {
+export const getSupabase = () => {
   // 서버 사이드에서는 null 반환
   if (typeof window === 'undefined') {
+    console.log('🚫 서버 사이드에서 Supabase 요청됨')
     return null
   }
 
@@ -57,27 +64,13 @@ export const getSupabase = async () => {
     return supabaseInstance
   }
 
-  // 초기화가 진행 중이면 기다림
-  if (initializationPromise) {
-    return await initializationPromise
-  }
-
-  // 새로운 초기화 시작
-  initializationPromise = createSupabaseClient()
-  
-  try {
-    supabaseInstance = await initializationPromise
-    return supabaseInstance
-  } catch (error) {
-    initializationPromise = null
-    throw error
-  } finally {
-    initializationPromise = null
-  }
+  // 새로운 인스턴스 생성
+  supabaseInstance = createSupabaseClient()
+  return supabaseInstance
 }
 
 // 레거시 호환성을 위한 export
-export const supabase = null
+export const supabase = typeof window !== 'undefined' ? getSupabase() : null
 
 // 클라이언트 초기화 상태 확인
 export const isSupabaseReady = () => {
@@ -86,6 +79,6 @@ export const isSupabaseReady = () => {
 
 // 클라이언트 재설정 (에러 복구용)
 export const resetSupabaseClient = () => {
+  console.log('🔄 Supabase 클라이언트 재설정')
   supabaseInstance = null
-  initializationPromise = null
 }
