@@ -65,6 +65,21 @@ export default function OrderCompleteContent() {
   };
 
   const getPaymentMethodDisplay = (method) => {
+    // method가 객체인 경우 처리
+    if (typeof method === 'object' && method !== null) {
+      if (method.easyPayMethod) {
+        return `${method.easyPayMethod} (간편결제)`;
+      }
+      if (method.type) {
+        return method.type;
+      }
+      if (method.provider) {
+        return method.provider;
+      }
+      return '알 수 없음';
+    }
+    
+    // method가 문자열인 경우 기존 로직
     const methodMap = {
       'CARD': '신용/체크카드',
       'TRANSFER': '실시간 계좌이체',
@@ -73,9 +88,10 @@ export default function OrderCompleteContent() {
       'KAKAOPAY': '카카오페이',
       'NAVERPAY': '네이버페이',
       'PAYCO': '페이코',
-      'TOSSPAY': '토스페이'
+      'TOSSPAY': '토스페이',
+      'EASY_PAY': '간편결제'
     };
-    return methodMap[method] || method;
+    return methodMap[method] || method || '알 수 없음';
   };
 
   if (loading) {

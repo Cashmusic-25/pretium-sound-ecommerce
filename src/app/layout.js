@@ -17,9 +17,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ko">
       <body className={`${inter.className} text-gray-800 min-h-screen bg-white`}>
-        {/* 포트원 V1 스크립트 */}
+        {/* 포트원 V2 스크립트 */}
         <Script 
-          src="https://cdn.iamport.kr/v1/iamport.js"
+          src="https://cdn.portone.io/v2/browser-sdk.js"
           strategy="beforeInteractive"
         />
         

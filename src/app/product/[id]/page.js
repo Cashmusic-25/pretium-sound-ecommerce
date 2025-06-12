@@ -499,6 +499,26 @@ export default function ProductPage({ params }) {
             </div>
           </div>
 
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center">
+              <span className="mr-2">📥</span>
+              서비스 제공 기간
+            </h3>
+            <div className="space-y-2 text-blue-800">
+              <p className="flex items-center">
+                <span className="font-medium">• 이용 시작:</span>
+                <span className="ml-2">구매 후 즉시 다운로드 가능</span>
+              </p>
+              <p className="flex items-center">
+                <span className="font-medium">• 이용 기간:</span>
+                <span className="ml-2">구매일로부터 2주간 다운로드 이용 가능</span>
+              </p>
+              <p className="text-sm text-blue-600 mt-2">
+                ※ 다운로드 후에는 영구적으로 이용 가능합니다
+              </p>
+            </div>
+          </div>
+
           {/* 탭 네비게이션 */}
           <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
             <div className="border-b border-gray-200">
