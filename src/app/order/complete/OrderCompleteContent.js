@@ -32,16 +32,27 @@ export default function OrderCompleteContent() {
       const orderResponse = await fetch(`/api/orders/${orderId}`);
       if (orderResponse.ok) {
         const orderResult = await orderResponse.json();
+        
+        // 디버깅 코드 추가
+        console.log('🔍 전체 주문 데이터:', orderResult);
+        console.log('🔍 주문 아이템들:', orderResult.order?.items);
+        
         setOrderData(orderResult.order);
-      } else {
-        throw new Error('주문 정보 조회 실패');
       }
-
+  
       // 결제 정보가 있다면 조회
       if (paymentId) {
         const paymentResponse = await fetch(`/api/payments/${paymentId}`);
         if (paymentResponse.ok) {
           const paymentResult = await paymentResponse.json();
+          
+          // 디버깅 코드 추가
+          console.log('💳 전체 결제 데이터:', paymentResult);
+          console.log('💳 결제 방법 원본:', paymentResult.payment?.method);
+          console.log('💳 결제 방법 타입:', typeof paymentResult.payment?.method);
+          console.log('💳 결제 금액 원본:', paymentResult.payment?.amount);
+          console.log('💳 결제 금액 타입:', typeof paymentResult.payment?.amount);
+          
           setPaymentData(paymentResult.payment);
         }
       }
@@ -65,21 +76,43 @@ export default function OrderCompleteContent() {
   };
 
   const getPaymentMethodDisplay = (method) => {
-    // method가 객체인 경우 처리
+    console.log('결제 방법 디버깅:', method, typeof method);
+    
     if (typeof method === 'object' && method !== null) {
+      // 새로운 포트원 V2 구조 처리
+      if (method.type === 'PaymentMethodEasyPay' && method.provider === 'KAKAOPAY') {
+        return '카카오페이';
+      }
+      
+      if (method.type === 'PaymentMethodEasyPay' && method.provider) {
+        return method.provider;
+      }
+      
+      // 기존 구조 처리
+      if (method.provider === 'KAKAOPAY' || method.provider === 'kakaopay') {
+        return '카카오페이';
+      }
+      
       if (method.easyPayMethod) {
         return `${method.easyPayMethod} (간편결제)`;
       }
-      if (method.type) {
-        return method.type === 'EASY_PAY' ? '카카오페이' : method.type;
+      
+      if (method.type === 'EASY_PAY') {
+        return '간편결제';
       }
+      
+      if (method.type) {
+        return method.type;
+      }
+      
       if (method.provider) {
         return method.provider;
       }
-      return '알 수 없음';
+      
+      return '간편결제';
     }
     
-    // method가 문자열인 경우 기존 로직
+    // 문자열인 경우 기존 로직
     const methodMap = {
       'CARD': '신용/체크카드',
       'TRANSFER': '실시간 계좌이체',
@@ -89,8 +122,9 @@ export default function OrderCompleteContent() {
       'NAVERPAY': '네이버페이',
       'PAYCO': '페이코',
       'TOSSPAY': '토스페이',
-      'EASY_PAY': '카카오페이'
+      'EASY_PAY': '간편결제'
     };
+    
     return methodMap[method] || method || '알 수 없음';
   };
 
@@ -199,7 +233,12 @@ export default function OrderCompleteContent() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">결제금액:</span>
-                    <span className="font-semibold">{(paymentData.amount || 0).toLocaleString()}원</span>
+                    <span className="font-semibold">
+                        {typeof paymentData.amount === 'object' 
+                        ? (paymentData.amount?.total || paymentData.amount?.value || 0).toLocaleString()
+                        : (paymentData.amount || 0).toLocaleString()
+                        }원
+                    </span>
                   </div>
                 </div>
               </div>
