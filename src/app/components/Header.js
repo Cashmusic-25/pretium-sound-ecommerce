@@ -50,8 +50,8 @@ export default function Header() {
 
   return (
     <>
-      <header className="fixed w-full top-0 z-40 bg-white/95 backdrop-blur-lg border-b border-white/20">
-        <nav className="container mx-auto px-4 py-4">
+      <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627dd', borderBottomColor: '#404041'}}>
+        <nav className="container mx-auto px-4 py-4" style={{backgroundColor: '#262627'}}>
           <div className="flex justify-between items-center">
             {/* 로고 */}
             <div 
@@ -67,7 +67,7 @@ export default function Header() {
                 <a
                   key={item.name}
                   href={item.href}
-                  className="text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200"
+                  className="text-gray-300 hover:text-blue-400 font-medium transition-colors duration-200"
                 >
                   {item.name}
                 </a>
@@ -77,7 +77,7 @@ export default function Header() {
               {isAdmin && (
                 <button
                   onClick={() => router.push('/admin')}
-                  className="flex items-center space-x-2 text-gray-700 hover:text-indigo-600 font-medium transition-colors duration-200 bg-indigo-50 px-3 py-2 rounded-lg"
+                  className="flex items-center space-x-2 text-gray-300 hover:text-blue-400 font-medium transition-colors duration-200 bg-blue-900/30 px-3 py-2 rounded-lg border border-blue-500/30"
                 >
                   <BarChart3 size={18} />
                   <span>관리자</span>
@@ -87,11 +87,11 @@ export default function Header() {
               {/* 장바구니 아이콘 */}
               <button 
                 onClick={handleCartClick}
-                className="relative p-2 text-gray-700 hover:text-indigo-600 transition-colors duration-200"
+                className="relative p-2 text-gray-300 hover:text-blue-400 transition-colors duration-200"
               >
                 <ShoppingCart size={24} />
                 {getTotalItems() > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
                     {getTotalItems()}
                   </span>
                 )}
@@ -102,25 +102,26 @@ export default function Header() {
                 <div className="relative">
                   <button
                     onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                    className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    className="flex items-center space-x-2 p-2 rounded-lg transition-colors"
+                    style={{'&:hover': {backgroundColor: '#3a3a3b'}}}
                   >
                     <Avatar name={user?.name} size={32} className="flex-shrink-0" />
                     <div className="text-left">
-                      <span className="text-gray-700 font-medium block">{user?.name || 'User'}</span>
+                      <span className="text-gray-300 font-medium block">{user?.name || 'User'}</span>
                       {isAdmin && (
-                        <span className="text-xs text-indigo-600 font-medium">관리자</span>
+                        <span className="text-xs text-blue-400 font-medium">관리자</span>
                       )}
                     </div>
                   </button>
 
                   {/* 사용자 드롭다운 메뉴 */}
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                      <div className="px-4 py-2 border-b border-gray-200">
-                        <p className="text-sm font-medium text-gray-800">{user?.name}</p>
-                        <p className="text-xs text-gray-500">{user?.email}</p>
+                    <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg border border-gray-700 py-2 z-50" style={{backgroundColor: '#2a2a2b'}}>
+                      <div className="px-4 py-2 border-b border-gray-700">
+                        <p className="text-sm font-medium text-gray-200">{user?.name}</p>
+                        <p className="text-xs text-gray-400">{user?.email}</p>
                         {isAdmin && (
-                          <span className="inline-block mt-1 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                          <span className="inline-block mt-1 text-xs bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
                             관리자
                           </span>
                         )}
@@ -132,7 +133,7 @@ export default function Header() {
                           router.push('/profile')
                           setIsUserMenuOpen(false)
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
                       >
                         <User size={16} />
                         <span>내 프로필</span>
@@ -143,7 +144,7 @@ export default function Header() {
                           router.push('/wishlist')
                           setIsUserMenuOpen(false)
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
                       >
                         <Heart size={16} />
                         <span>위시리스트</span>
@@ -159,12 +160,12 @@ export default function Header() {
                           router.push('/orders')
                           setIsUserMenuOpen(false)
                         }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center space-x-2"
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
                       >
                         <Package size={16} />
                         <span>주문 내역</span>
                         {user?.orders?.length > 0 && (
-                          <span className="bg-indigo-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
+                          <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
                             {user.orders.length}
                           </span>
                         )}
@@ -173,7 +174,7 @@ export default function Header() {
                       {/* 관리자 전용 메뉴 */}
                       {isAdmin && (
                         <>
-                          <hr className="my-2" />
+                          <hr className="my-2 border-gray-700" />
                           <div className="px-4 py-1">
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">관리자 메뉴</p>
                           </div>
@@ -183,7 +184,7 @@ export default function Header() {
                               router.push('/admin')
                               setIsUserMenuOpen(false)
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                            className="w-full text-left px-4 py-2 text-sm text-blue-300 hover:bg-blue-900/30 flex items-center space-x-2"
                           >
                             <BarChart3 size={16} />
                             <span>관리자 대시보드</span>
@@ -194,7 +195,7 @@ export default function Header() {
                               router.push('/admin/products')
                               setIsUserMenuOpen(false)
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                            className="w-full text-left px-4 py-2 text-sm text-blue-300 hover:bg-blue-900/30 flex items-center space-x-2"
                           >
                             <Package size={16} />
                             <span>상품 관리</span>
@@ -205,7 +206,7 @@ export default function Header() {
                               router.push('/admin/orders')
                               setIsUserMenuOpen(false)
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-indigo-700 hover:bg-indigo-50 flex items-center space-x-2"
+                            className="w-full text-left px-4 py-2 text-sm text-blue-300 hover:bg-blue-900/30 flex items-center space-x-2"
                           >
                             <ShoppingCart size={16} />
                             <span>주문 관리</span>
@@ -213,11 +214,11 @@ export default function Header() {
                         </>
                       )}
                       
-                      <hr className="my-2" />
+                      <hr className="my-2 border-gray-700" />
                       
                       <button
                         onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                        className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/30 flex items-center space-x-2"
                       >
                         <LogOut size={16} />
                         <span>로그아웃</span>
@@ -229,13 +230,13 @@ export default function Header() {
                 <div className="flex items-center space-x-4">
                   <button
                     onClick={() => handleAuthClick('login')}
-                    className="text-gray-700 hover:text-indigo-600 font-medium transition-colors"
+                    className="text-gray-300 hover:text-blue-400 font-medium transition-colors"
                   >
                     로그인
                   </button>
                   <button
                     onClick={() => handleAuthClick('signup')}
-                    className="bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                   >
                     회원가입
                   </button>
@@ -247,11 +248,11 @@ export default function Header() {
             <div className="md:hidden flex items-center space-x-2">
               <button 
                 onClick={handleCartClick}
-                className="relative p-2 text-gray-700"
+                className="relative p-2 text-gray-300"
               >
                 <ShoppingCart size={24} />
                 {getTotalItems() > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-indigo-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                  <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
                     {getTotalItems()}
                   </span>
                 )}
@@ -261,13 +262,13 @@ export default function Header() {
                 <button className="p-2 relative">
                   <Avatar name={user?.name} size={24} />
                   {isAdmin && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full"></div>
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full"></div>
                   )}
                 </button>
               )}
               
               <button
-                className="p-2"
+                className="p-2 text-gray-300"
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
                 {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -277,13 +278,13 @@ export default function Header() {
 
           {/* 모바일 메뉴 */}
           {isMenuOpen && (
-            <div className="md:hidden mt-4 pb-4 border-t border-gray-200">
+            <div className="md:hidden mt-4 pb-4 border-t border-gray-700">
               <div className="flex flex-col space-y-2 pt-4">
                 {navItems.map((item) => (
                   <a
                     key={item.name}
                     href={item.href}
-                    className="text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors duration-200"
+                    className="text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors duration-200"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     {item.name}
@@ -297,7 +298,7 @@ export default function Header() {
                       router.push('/admin')
                       setIsMenuOpen(false)
                     }}
-                    className="text-left text-indigo-600 hover:text-indigo-800 font-medium py-2 transition-colors flex items-center space-x-2"
+                    className="text-left text-blue-400 hover:text-blue-300 font-medium py-2 transition-colors flex items-center space-x-2"
                   >
                     <BarChart3 size={18} />
                     <span>관리자 대시보드</span>
@@ -309,26 +310,26 @@ export default function Header() {
                   <>
                     <button
                       onClick={() => handleAuthClick('login')}
-                      className="text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors"
+                      className="text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors"
                     >
                       로그인
                     </button>
                     <button
                       onClick={() => handleAuthClick('signup')}
-                      className="text-left bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-600 transition-colors mt-2"
+                      className="text-left bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors mt-2"
                     >
                       회원가입
                     </button>
                   </>
                 ) : (
-                  <div className="border-t border-gray-200 pt-4 mt-4">
+                  <div className="border-t border-gray-700 pt-4 mt-4">
                     <div className="flex items-center space-x-3 mb-4">
                       <Avatar name={user?.name} size={40} />
                       <div>
-                        <p className="font-medium text-gray-800">{user?.name}</p>
-                        <p className="text-sm text-gray-500">{user?.email}</p>
+                        <p className="font-medium text-gray-200">{user?.name}</p>
+                        <p className="text-sm text-gray-400">{user?.email}</p>
                         {isAdmin && (
-                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                          <span className="text-xs bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full border border-blue-500/30">
                             관리자
                           </span>
                         )}
@@ -340,7 +341,7 @@ export default function Header() {
                         router.push('/profile')
                         setIsMenuOpen(false)
                       }}
-                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors"
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors"
                     >
                       내 프로필
                     </button>
@@ -349,7 +350,7 @@ export default function Header() {
                         router.push('/wishlist')
                         setIsMenuOpen(false)
                       }}
-                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors flex items-center justify-between"
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center justify-between"
                     >
                       <span>위시리스트</span>
                       {user?.wishlist?.length > 0 && (
@@ -363,18 +364,18 @@ export default function Header() {
                         router.push('/orders')
                         setIsMenuOpen(false)
                       }}
-                      className="w-full text-left text-gray-700 hover:text-indigo-600 font-medium py-2 transition-colors flex items-center justify-between"
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center justify-between"
                     >
                       <span>주문 내역</span>
                       {user?.orders?.length > 0 && (
-                        <span className="bg-indigo-500 text-white text-xs rounded-full px-2 py-0.5">
+                        <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
                           {user.orders.length}
                         </span>
                       )}
                     </button>
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left text-red-600 hover:text-red-800 font-medium py-2 transition-colors"
+                      className="w-full text-left text-red-400 hover:text-red-300 font-medium py-2 transition-colors"
                     >
                       로그아웃
                     </button>

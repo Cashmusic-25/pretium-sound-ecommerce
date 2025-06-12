@@ -78,7 +78,7 @@ export default function ProductCard({ product }) {
             onError={handleImageError}
           />
         ) : (
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 h-full flex items-center justify-center text-white text-6xl">
+          <div className="h-full flex items-center justify-center text-white text-6xl" style={{background: 'linear-gradient(135deg, #262627 0%, #404041 100%)'}}>
             {product.icon}
           </div>
         )}
@@ -86,7 +86,7 @@ export default function ProductCard({ product }) {
       
       {/* 상품 정보 */}
       <div className="space-y-4">
-        <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 transition-colors">
+        <h3 className="text-xl font-bold text-gray-800 transition-colors" style={{'&:hover': {color: '#262627'}}}>
           {product.title}
         </h3>
         
@@ -95,7 +95,7 @@ export default function ProductCard({ product }) {
         </p>
         
         <div className="flex items-center justify-between">
-          <span className="text-2xl font-bold text-indigo-600">
+          <span className="text-2xl font-bold" style={{color: '#262627'}}>
             {product.price}
           </span>
           <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
@@ -106,7 +106,14 @@ export default function ProductCard({ product }) {
         <div className="flex space-x-2">
           <button
             onClick={handleCardClick}
-            className="flex-1 border-2 border-indigo-500 text-indigo-500 py-3 rounded-xl font-semibold hover:bg-indigo-50 transition-all duration-300"
+            className="flex-1 border-2 py-3 rounded-xl font-semibold transition-all duration-300"
+            style={{
+              borderColor: '#262627',
+              color: '#262627',
+              '&:hover': {
+                backgroundColor: '#f8f9fa'
+              }
+            }}
           >
             자세히 보기
           </button>
@@ -117,8 +124,11 @@ export default function ProductCard({ product }) {
             className={`flex-1 py-3 rounded-xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg ${
               isAdding
                 ? 'bg-green-500 text-white'
-                : 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700'
+                : 'text-white hover:opacity-90'
             }`}
+            style={!isAdding ? {
+              background: 'linear-gradient(to right, #262627, #404041)'
+            } : {}}
           >
             {isAdding ? '추가됨!' : '담기'}
           </button>

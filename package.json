@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@portone/browser-sdk": "^0.0.21",
     "@supabase/supabase-js": "^2.49.8",
     "bcryptjs": "^3.0.2",
     "jsonwebtoken": "^9.0.2",

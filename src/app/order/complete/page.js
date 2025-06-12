@@ -1,91 +1,252 @@
-'use client'
+'use client';
 
-import { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { CheckCircle } from 'lucide-react'
-import Header from '../../components/Header'
-
-function OrderCompleteContent() {
-  const searchParams = useSearchParams()
-  const orderNumber = searchParams.get('orderNumber')
-
-  return (
-    <div className="pt-24 pb-16">
-      <div className="container mx-auto px-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6">
-              <CheckCircle size={48} className="text-green-500" />
-            </div>
-            
-            <h1 className="text-3xl font-bold text-gray-800 mb-4">
-              🎉 주문이 완료되었습니다!
-            </h1>
-            
-            <p className="text-xl text-gray-600 mb-8">
-              주문번호: <span className="font-mono font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded">
-                {orderNumber || 'N/A'}
-              </span>
-            </p>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-              <h3 className="font-bold text-blue-800 mb-2">📧 주문 확인</h3>
-              <p className="text-blue-700 text-sm">
-                주문 확인 메일이 발송되었습니다. 주문 내역은 마이페이지에서도 확인하실 수 있습니다.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => window.location.href = '/orders'}
-                className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-4 rounded-xl font-bold text-lg hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center space-x-2"
-              >
-                <span>📦 주문 내역 보기</span>
-              </button>
-              
-              <button
-                onClick={() => window.location.href = '/'}
-                className="w-full border-2 border-gray-300 text-gray-600 py-4 rounded-xl font-bold text-lg hover:bg-gray-50 transition-all duration-300"
-              >
-                🛒 쇼핑 계속하기
-              </button>
-            </div>
-
-            <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-semibold text-gray-800 mb-2">📞 고객센터</h4>
-              <p className="text-sm text-gray-600">
-                주문 관련 문의: <span className="font-mono text-indigo-600">1588-1234</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function LoadingFallback() {
-  return (
-    <div className="pt-24 pb-16">
-      <div className="container mx-auto px-4">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">주문 정보를 불러오는 중...</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function OrderCompletePage() {
+  const [orderData, setOrderData] = useState(null);
+  const [paymentData, setPaymentData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { user } = useAuth();
+  
+  const orderId = searchParams.get('orderId');
+  const paymentId = searchParams.get('paymentId');
+
+  useEffect(() => {
+    if (orderId) {
+      fetchOrderData();
+    } else {
+      setError('주문 정보가 없습니다.');
+      setLoading(false);
+    }
+  }, [orderId]);
+
+  const fetchOrderData = async () => {
+    try {
+      // 주문 정보 조회
+      const orderResponse = await fetch(`/api/orders/${orderId}`);
+      if (orderResponse.ok) {
+        const orderResult = await orderResponse.json();
+        setOrderData(orderResult.order);
+      } else {
+        throw new Error('주문 정보 조회 실패');
+      }
+
+      // 결제 정보가 있다면 조회
+      if (paymentId) {
+        const paymentResponse = await fetch(`/api/payments/${paymentId}`);
+        if (paymentResponse.ok) {
+          const paymentResult = await paymentResponse.json();
+          setPaymentData(paymentResult.payment);
+        }
+      }
+    } catch (error) {
+      console.error('데이터 조회 오류:', error);
+      setError('주문 정보를 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusDisplay = (status) => {
+    const statusMap = {
+      'pending': { text: '결제 대기', color: 'text-yellow-600', bg: 'bg-yellow-100' },
+      'processing': { text: '결제 완료', color: 'text-green-600', bg: 'bg-green-100' },
+      'shipped': { text: '배송중', color: 'text-blue-600', bg: 'bg-blue-100' },
+      'delivered': { text: '배송완료', color: 'text-green-600', bg: 'bg-green-100' },
+      'cancelled': { text: '취소됨', color: 'text-red-600', bg: 'bg-red-100' }
+    };
+    return statusMap[status] || { text: status, color: 'text-gray-600', bg: 'bg-gray-100' };
+  };
+
+  const getPaymentMethodDisplay = (method) => {
+    const methodMap = {
+      'CARD': '신용/체크카드',
+      'TRANSFER': '실시간 계좌이체',
+      'VIRTUAL_ACCOUNT': '가상계좌',
+      'MOBILE': '휴대폰 결제',
+      'KAKAOPAY': '카카오페이',
+      'NAVERPAY': '네이버페이',
+      'PAYCO': '페이코',
+      'TOSSPAY': '토스페이'
+    };
+    return methodMap[method] || method;
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center min-h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="ml-4 text-lg">주문 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !orderData) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-md mx-auto text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-red-600 mb-4">{error || '주문을 찾을 수 없습니다'}</h1>
+          <div className="space-y-2">
+            <button
+              onClick={() => router.push('/orders')}
+              className="block w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mb-2"
+            >
+              주문 내역 보기
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="block w-full bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
+            >
+              홈으로 돌아가기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const statusInfo = getStatusDisplay(orderData.status);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-      <Suspense fallback={<LoadingFallback />}>
-        <OrderCompleteContent />
-      </Suspense>
+    <div className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        {/* 헤더 */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-8 text-center">
+          <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-bold mb-2">주문이 완료되었습니다!</h1>
+          <p className="text-blue-100">주문해 주셔서 감사합니다.</p>
+        </div>
+
+        {/* 주문 정보 */}
+        <div className="p-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-700 mb-2">주문 정보</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">주문번호:</span>
+                  <span className="font-mono">{orderData.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">주문일시:</span>
+                  <span>{new Date(orderData.created_at).toLocaleString('ko-KR')}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">주문상태:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color} ${statusInfo.bg}`}>
+                    {statusInfo.text}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {paymentData && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-700 mb-2">결제 정보</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">결제번호:</span>
+                    <span className="font-mono">{paymentData.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">결제방법:</span>
+                    <span>{getPaymentMethodDisplay(paymentData.method)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">결제금액:</span>
+                    <span className="font-semibold">{paymentData.amount?.toLocaleString()}원</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 주문 상품 */}
+          <div className="mb-8">
+            <h3 className="font-semibold text-lg mb-4">주문 상품</h3>
+            <div className="space-y-3">
+              {orderData.items.map((item, index) => (
+                <div key={index} className="flex justify-between items-center py-3 border-b border-gray-200">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{item.title}</h4>
+                    <p className="text-sm text-gray-600">수량: {item.quantity}개</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{(item.price * item.quantity).toLocaleString()}원</p>
+                    <p className="text-sm text-gray-600">단가: {item.price.toLocaleString()}원</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t-2 border-gray-300">
+              <div className="flex justify-between items-center text-lg font-bold">
+                <span>총 결제금액</span>
+                <span className="text-blue-600">{orderData.total_amount.toLocaleString()}원</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 배송 정보 */}
+          {orderData.shipping_address && (
+            <div className="mb-8">
+              <h3 className="font-semibold text-lg mb-4">배송 정보</h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">수령인:</span>
+                    <span className="ml-2 font-medium">{orderData.shipping_address.name}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">연락처:</span>
+                    <span className="ml-2">{orderData.shipping_address.phone}</span>
+                  </div>
+                  <div className="md:col-span-2">
+                    <span className="text-gray-600">주소:</span>
+                    <span className="ml-2">
+                      {orderData.shipping_address.address}
+                      {orderData.shipping_address.detailAddress && `, ${orderData.shipping_address.detailAddress}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 액션 버튼 */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => router.push('/orders')}
+              className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 font-semibold transition-colors"
+            >
+              주문 내역 보기
+            </button>
+            <button
+              onClick={() => router.push('/')}
+              className="flex-1 bg-gray-200 text-gray-800 py-3 px-4 rounded-md hover:bg-gray-300 font-semibold transition-colors"
+            >
+              계속 쇼핑하기
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

@@ -26,14 +26,14 @@ export default function Features() {
 
   return (
     <section id="about" className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-3xl p-8 md:p-12 mb-16">
-      <h2 className="text-4xl font-bold text-center mb-12 gradient-text">
+      <h2 className="text-4xl font-bold text-center mb-12 text-gray-800">
         왜 Pretium Sound인가요?
       </h2>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         {features.map((feature, index) => (
           <div key={index} className="text-center group">
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-white group-hover:scale-110 transition-transform duration-300">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-white group-hover:scale-110 transition-transform duration-300" style={{background: 'linear-gradient(135deg, #262627 0%, #404041 100%)'}}>
               {feature.icon}
             </div>
             

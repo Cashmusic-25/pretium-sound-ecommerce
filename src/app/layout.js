@@ -1,10 +1,10 @@
 import { Inter } from 'next/font/google'
+import Script from 'next/script'
 import './globals.css'
 import { CartProvider } from './contexts/CartContext'
 import { FilterProvider } from './contexts/FilterContext'
 import { AuthProvider } from './contexts/AuthContext'
 import DebugAuth from './components/DebugAuth'
-
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -16,7 +16,13 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="ko">
-      <body className={inter.className}>
+      <body className={`${inter.className} text-gray-800 min-h-screen bg-white`}>
+        {/* 포트원 V1 스크립트 */}
+        <Script 
+          src="https://cdn.iamport.kr/v1/iamport.js"
+          strategy="beforeInteractive"
+        />
+        
         <AuthProvider>
           <CartProvider>
             <FilterProvider>
