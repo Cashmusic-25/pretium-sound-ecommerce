@@ -50,8 +50,8 @@ export default function Header() {
 
   return (
     <>
-      <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627dd', borderBottomColor: '#404041'}}>
-        <nav className="container mx-auto px-4 py-4" style={{backgroundColor: '#262627'}}>
+      <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627', borderBottomColor: '#404041'}}>
+        <nav className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             {/* 로고 */}
             <div 
