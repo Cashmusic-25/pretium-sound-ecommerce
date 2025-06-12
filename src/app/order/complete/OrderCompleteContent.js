@@ -71,7 +71,7 @@ export default function OrderCompleteContent() {
         return `${method.easyPayMethod} (간편결제)`;
       }
       if (method.type) {
-        return method.type;
+        return method.type === 'EASY_PAY' ? '카카오페이' : method.type;
       }
       if (method.provider) {
         return method.provider;
@@ -89,9 +89,21 @@ export default function OrderCompleteContent() {
       'NAVERPAY': '네이버페이',
       'PAYCO': '페이코',
       'TOSSPAY': '토스페이',
-      'EASY_PAY': '간편결제'
+      'EASY_PAY': '카카오페이'
     };
     return methodMap[method] || method || '알 수 없음';
+  };
+
+  // 가격을 안전하게 숫자로 변환하는 함수 추가
+  const parsePrice = (priceValue) => {
+    if (typeof priceValue === 'number') {
+      return priceValue;
+    }
+    if (typeof priceValue === 'string') {
+      // "₩42,000원" 형태에서 숫자만 추출
+      return parseInt(priceValue.replace(/[₩,원]/g, '')) || 0;
+    }
+    return 0;
   };
 
   if (loading) {
@@ -187,7 +199,7 @@ export default function OrderCompleteContent() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">결제금액:</span>
-                    <span className="font-semibold">{paymentData.amount?.toLocaleString()}원</span>
+                    <span className="font-semibold">{(paymentData.amount || 0).toLocaleString()}원</span>
                   </div>
                 </div>
               </div>
@@ -205,8 +217,8 @@ export default function OrderCompleteContent() {
                     <p className="text-sm text-gray-600">수량: {item.quantity}개</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold">{(item.price * item.quantity).toLocaleString()}원</p>
-                    <p className="text-sm text-gray-600">단가: {item.price.toLocaleString()}원</p>
+                    <p className="font-semibold">{(parsePrice(item.price) * item.quantity).toLocaleString()}원</p>
+                    <p className="text-sm text-gray-600">단가: {parsePrice(item.price).toLocaleString()}원</p>
                   </div>
                 </div>
               ))}
