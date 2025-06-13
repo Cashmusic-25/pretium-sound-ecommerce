@@ -86,7 +86,24 @@ export default function Footer() {
             <div>
               <h4 className="text-white font-semibold mb-3">Contact</h4>
               <div className="space-y-1 text-sm text-gray-400">
-                <p>Email. jasonincompany@gmail.com</p>
+                <p>
+                  <span className="inline-block w-4 mr-2">📞</span>
+                  <a 
+                    href="tel:010-1234-5678" 
+                    className="hover:text-blue-400 transition-colors duration-200"
+                  >
+                    대표자: 010-8667-9772
+                  </a>
+                </p>
+                <p>
+                  <span className="inline-block w-4 mr-2">✉️</span>
+                  <a 
+                    href="mailto:jasonincompany@gmail.com"
+                    className="hover:text-blue-400 transition-colors duration-200"
+                  >
+                    jasonincompany@gmail.com
+                  </a>
+                </p>
               </div>
             </div>
           </div>

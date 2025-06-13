@@ -13,22 +13,22 @@ import {
   FileText,
   Tag,
   Image as ImageIcon,
-  Camera
+  Camera,
+  File,
+  Music,
+  Download
 } from 'lucide-react'
-import { useAuth } from '../../../contexts/AuthContext'  // 상대경로로 복구
-import { supabase } from '../../../../lib/supabase'  // 4개 - 맞음
-import Header from '../../../components/Header'           // 상대경로로 복구
+import { useAuth } from '../../../contexts/AuthContext'
+import { supabase } from '../../../../lib/supabase'
+import Header from '../../../components/Header'
 
+// 기존 이미지 업로드 함수 (그대로 유지)
 async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
   
   try {
-    // getSupabase 함수 import
     const { getSupabase } = await import('../../../../lib/supabase')
-    console.log('✅ getSupabase 함수 로드 완료')
-    
     const supabase = getSupabase()
-    console.log('🔧 Supabase 클라이언트:', supabase ? '연결됨' : '연결 실패')
     
     if (!supabase) {
       throw new Error('Supabase 연결이 필요합니다')
@@ -37,28 +37,12 @@ async function uploadProductImage(file) {
     const fileExt = file.name.split('.').pop()
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
-    
-    console.log('📁 파일 경로:', filePath);
-    console.log('📦 버킷 이름: product-images');
-
-    // Storage 버킷 존재 여부 확인
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
-    console.log('🗂️ 사용 가능한 버킷들:', buckets?.map(b => b.name))
-    
-    if (bucketsError) {
-      console.error('버킷 목록 조회 실패:', bucketsError)
-    }
 
     const { data, error } = await supabase.storage
       .from('product-images')
       .upload(filePath, file)
 
-    console.log('📤 업로드 결과 - data:', data);
-    console.log('❌ 업로드 결과 - error:', error);
-
     if (error) {
-      console.error('🚨 이미지 업로드 실패:', error)
-      console.error('🚨 에러 상세:', JSON.stringify(error, null, 2))
       throw error
     }
 
@@ -66,28 +50,44 @@ async function uploadProductImage(file) {
       .from('product-images')
       .getPublicUrl(filePath)
 
-    console.log('✅ 생성된 공개 URL:', publicUrl);
-
     return {
       url: publicUrl,
       path: filePath
     }
   } catch (error) {
     console.error('💥 이미지 업로드 에러:', error)
-    console.error('💥 에러 상세:', JSON.stringify(error, null, 2))
     throw error
   }
+}
+
+// 파일 타입 결정 함수
+function getFileType(extension) {
+  const ext = extension.toLowerCase()
+  if (ext === 'pdf') return 'pdf'
+  if (['zip', 'rar', '7z'].includes(ext)) return 'archive'
+  if (['mp3', 'wav', 'flac', 'm4a'].includes(ext)) return 'audio'
+  if (['mp4', 'avi', 'mov', 'wmv'].includes(ext)) return 'video'
+  return 'document'
+}
+
+// 파일 크기 포맷팅 함수
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 export default function AdminProductAddPage() {
   const router = useRouter()
   const { isAdmin } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isMounted, setIsMounted] = useState(false)
 
-  // 클라이언트 마운트 감지
   useEffect(() => {
     setIsMounted(true)
   }, [])
@@ -98,12 +98,13 @@ export default function AdminProductAddPage() {
     detailedDescription: '',
     price: '',
     icon: '🎵',
-    image: null,        // Supabase URL
-    imagePath: null,    // 추가: Supabase 파일 경로
-    imagePreview: null, // 미리보기 URL
+    image: null,
+    imagePath: null,
+    imagePreview: null,
     category: '',
     features: [''],
     contents: [''],
+    files: [], // E-Book 파일들
     specifications: {
       '페이지 수': '',
       '난이도': '',
@@ -156,86 +157,164 @@ export default function AdminProductAddPage() {
     if (success) setSuccess('')
   }
 
-// handleImageUpload 함수를 이것으로 교체 (디버깅 로그 포함)
-const handleImageUpload = async (e) => {
-  console.log('🖼️ 이미지 업로드 핸들러 시작');
-  
-  const file = e.target.files[0]
-  if (!file) {
-    console.log('❌ 파일이 선택되지 않음');
-    return;
+  // 기존 이미지 업로드 핸들러 (그대로 유지)
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError('이미지 크기는 5MB 이하만 가능합니다.')
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const previewUrl = URL.createObjectURL(file)
+      setProductForm(prev => ({
+        ...prev,
+        imagePreview: previewUrl
+      }))
+
+      const result = await uploadProductImage(file)
+      
+      setProductForm(prev => ({
+        ...prev,
+        image: result.url,
+        imagePath: result.path,
+        imagePreview: result.url
+      }))
+
+      setSuccess('이미지 업로드 완료!')
+      
+    } catch (error) {
+      setError('이미지 업로드 실패: ' + error.message)
+      setProductForm(prev => ({
+        ...prev,
+        image: null,
+        imagePreview: null,
+        imagePath: null
+      }))
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  console.log('📁 선택된 파일:', file.name, file.type, file.size);
+  // 새로운 E-Book 파일 업로드 핸들러 (API 사용)
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
 
-  // 파일 크기 체크 (5MB 제한)
-  const maxSize = 5 * 1024 * 1024
-  if (file.size > maxSize) {
-    console.log('❌ 파일 크기 초과:', file.size);
-    setError('이미지 크기는 5MB 이하만 가능합니다.')
-    return
-  }
+    console.log('📁 선택된 파일:', file.name, file.type, file.size)
 
-  // 파일 타입 체크
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-  if (!allowedTypes.includes(file.type)) {
-    console.log('❌ 파일 타입 불일치:', file.type);
-    setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
-    return
-  }
+    // 파일 크기 체크 (50MB 제한)
+    const maxSize = 50 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError('파일 크기는 50MB 이하만 가능합니다.')
+      return
+    }
 
-  console.log('✅ 파일 검증 통과');
-
-  // 업로드 진행상태 표시
-  setIsLoading(true)
-  setError('')
-  setSuccess('')
-
-  try {
-    console.log('🔄 미리보기 URL 생성 중...');
-    // 미리보기 URL 생성 (즉시 표시용)
-    const previewUrl = URL.createObjectURL(file)
-    console.log('🖼️ 미리보기 URL:', previewUrl);
+    // 파일 타입 체크
+    const fileExt = file.name.split('.').pop().toLowerCase()
+    const allowedExtensions = ['pdf', 'zip', 'mp3', 'wav', 'mp4', 'avi', 'rar', '7z']
     
+    if (!allowedExtensions.includes(fileExt)) {
+      setError('PDF, ZIP, MP3, WAV, MP4 파일만 업로드 가능합니다.')
+      return
+    }
+
+    setIsUploadingFile(true)
+    setError('')
+
+    try {
+      // FormData 생성
+      const formData = new FormData()
+      formData.append('file', file)
+
+      console.log('🌐 API 호출 시작...')
+
+      // API 라우트 호출
+      const response = await fetch('/api/upload/ebook', {
+        method: 'POST',
+        body: formData
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || '업로드 실패')
+      }
+
+      console.log('✅ 업로드 성공:', result)
+
+      // 파일 ID 생성
+      const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2)}`
+      
+      const newFile = {
+        id: fileId,
+        filename: result.filename,
+        filePath: result.filePath,
+        type: result.type,
+        size: result.size,
+        description: '', // 나중에 사용자가 입력
+        uploadedAt: result.uploadedAt
+      }
+
+      setProductForm(prev => ({
+        ...prev,
+        files: [...prev.files, newFile]
+      }))
+
+      setSuccess(`${file.name} 업로드 완료!`)
+      
+      // 파일 input 리셋
+      e.target.value = ''
+      
+    } catch (error) {
+      console.error('파일 업로드 실패:', error)
+      setError('파일 업로드 실패: ' + error.message)
+    } finally {
+      setIsUploadingFile(false)
+    }
+  }
+
+  // 파일 제거 핸들러
+  const handleRemoveFile = (fileId) => {
     setProductForm(prev => ({
       ...prev,
-      imagePreview: previewUrl
+      files: prev.files.filter(file => file.id !== fileId)
     }))
-
-    console.log('☁️ Supabase Storage 업로드 시작...');
-    // uploadProductImage 함수 확인
-    console.log('🔧 uploadProductImage 함수:', typeof uploadProductImage);
-    
-    // Supabase Storage에 업로드
-    const result = await uploadProductImage(file)
-    console.log('✅ 업로드 성공:', result);
-    
-    // 실제 업로드된 URL로 업데이트
-    setProductForm(prev => ({
-      ...prev,
-      image: result.url, // 실제 Supabase URL
-      imagePath: result.path, // 삭제용 경로
-      imagePreview: result.url
-    }))
-
-    setSuccess('이미지 업로드 완료!')
-    console.log('🎉 이미지 업로드 완료:', result.url);
-    
-  } catch (error) {
-    console.error('💥 이미지 업로드 실패:', error);
-    setError('이미지 업로드 실패: ' + error.message)
-    // 실패 시 미리보기 제거
-    setProductForm(prev => ({
-      ...prev,
-      image: null,
-      imagePreview: null,
-      imagePath: null
-    }))
-  } finally {
-    setIsLoading(false)
-    console.log('🏁 이미지 업로드 프로세스 완료');
   }
-}
+
+  // 파일 설명 업데이트 핸들러
+  const handleFileDescriptionChange = (fileId, description) => {
+    setProductForm(prev => ({
+      ...prev,
+      files: prev.files.map(file => 
+        file.id === fileId ? { ...file, description } : file
+      )
+    }))
+  }
+
+  // 파일 아이콘 결정
+  const getFileIcon = (type) => {
+    switch (type) {
+      case 'pdf': return <FileText className="text-red-500" size={20} />
+      case 'audio': return <Music className="text-purple-500" size={20} />
+      case 'archive': return <Package className="text-orange-500" size={20} />
+      case 'video': return <File className="text-blue-500" size={20} />
+      default: return <File className="text-gray-500" size={20} />
+    }
+  }
 
   // 이미지 제거 핸들러
   const handleRemoveImage = () => {
@@ -246,6 +325,7 @@ const handleImageUpload = async (e) => {
     }))
   }
 
+  // 기존 핸들러들 (그대로 유지)
   const handleSpecificationChange = (key, value) => {
     setProductForm(prev => ({
       ...prev,
@@ -321,6 +401,14 @@ const handleImageUpload = async (e) => {
       return false
     }
 
+    // 파일이 있다면 모든 파일에 설명이 있는지 확인
+    for (const file of productForm.files) {
+      if (!file.description.trim()) {
+        setError(`"${file.filename}" 파일의 설명을 입력해주세요.`)
+        return false
+      }
+    }
+
     return true
   }
 
@@ -340,24 +428,36 @@ const handleImageUpload = async (e) => {
       const newProductData = {
         title: productForm.title.trim(),
         description: productForm.description.trim(),
-        detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
+        detailed_description: productForm.detailedDescription.trim() || productForm.description.trim(),
         price: priceNum,
         icon: productForm.icon,
-        image: productForm.image,
-        imagePath: productForm.imagePath,
+        image_url: productForm.image,
         category: productForm.category,
         features: productForm.features.filter(f => f.trim()),
         contents: productForm.contents.filter(c => c.trim()),
+        files: productForm.files, // 파일 정보 추가
         specifications: Object.fromEntries(
           Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
         )
       }
   
-      // @ 별칭 사용
-      const { createProduct } = await import('@/data/productHelpers')
-      const createdProduct = await createProduct(newProductData)
-  
-      console.log('✅ 상품 생성 성공:', createdProduct)
+      console.log('💾 저장할 상품 데이터:', newProductData)
+
+      // Supabase에 직접 저장
+      const { getSupabase } = await import('../../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { data, error } = await supabase
+        .from('products')
+        .insert([newProductData])
+        .select()
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      console.log('✅ 상품 생성 성공:', data)
       setSuccess('상품이 성공적으로 추가되었습니다!')
       
       setTimeout(() => {
@@ -373,9 +473,7 @@ const handleImageUpload = async (e) => {
   }
 
   const formatPrice = (value) => {
-    // 숫자만 추출
     const numbers = value.replace(/[^\d]/g, '')
-    // 천 단위 콤마 추가
     return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
 
@@ -510,6 +608,101 @@ const handleImageUpload = async (e) => {
                 </div>
               </div>
 
+              {/* E-Book 파일 업로드 섹션 */}
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                  <Download className="text-indigo-600" size={24} />
+                  <span>E-Book 파일</span>
+                </h2>
+
+                {/* 파일 업로드 */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    다운로드 파일 추가
+                  </label>
+                  
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                    <div className="text-center">
+                      {isUploadingFile ? (
+                        <div className="flex flex-col items-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-2"></div>
+                          <p className="text-sm text-gray-600">업로드 중...</p>
+                        </div>
+                      ) : (
+                        <>
+                          <Upload className="mx-auto text-gray-400 mb-2" size={32} />
+                          <p className="text-sm font-medium text-gray-600 mb-1">
+                            파일 업로드
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            PDF, ZIP, MP3, WAV (최대 50MB)
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf,.zip,.mp3,.wav,.mp4,.avi"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      disabled={isUploadingFile}
+                    />
+                  </label>
+                </div>
+
+                {/* 업로드된 파일 목록 */}
+                {productForm.files.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-700">업로드된 파일 ({productForm.files.length}개)</h3>
+                    
+                    {productForm.files.map((file) => (
+                      <div key={file.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0 mt-1">
+                            {getFileIcon(file.type)}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {file.filename}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {file.size} • {file.type}
+                                </p>
+                              </div>
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFile(file.id)}
+                                className="ml-2 text-red-500 hover:text-red-700 transition-colors"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                            
+                            <div className="mt-3">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                파일 설명 *
+                              </label>
+                              <input
+                                type="text"
+                                value={file.description}
+                                onChange={(e) => handleFileDescriptionChange(file.id, e.target.value)}
+                                placeholder="예: 메인 교재 PDF, 연습용 음원 파일"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                                maxLength={100}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* 이미지 업로드 섹션 */}
               <div>
                 <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
@@ -543,7 +736,7 @@ const handleImageUpload = async (e) => {
                           accept="image/jpeg,image/jpg,image/png,image/webp"
                           onChange={handleImageUpload}
                           className="hidden"
-                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
+                          disabled={isLoading}
                         />
                       </label>
                     ) : (
@@ -557,12 +750,11 @@ const handleImageUpload = async (e) => {
                           type="button"
                           onClick={handleRemoveImage}
                           className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
-                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
+                          disabled={isLoading}
                         >
                           <X size={16} />
                         </button>
                         
-                        {/* 추가: 업로드 진행상태 표시 */}
                         {isLoading ? (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
                             <div className="text-white text-center">
@@ -579,7 +771,7 @@ const handleImageUpload = async (e) => {
                     )}
                   </div>
 
-                  {/* 아이콘 선택 (백업용) */}
+                  {/* 아이콘 선택 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       아이콘 (이미지가 없을 때 사용)
@@ -799,7 +991,7 @@ const handleImageUpload = async (e) => {
               </button>
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || isUploadingFile}
                 className="px-6 py-3 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
