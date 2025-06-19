@@ -13,24 +13,30 @@ export default function OrderCompleteContent() {
   
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, makeAuthenticatedRequest } = useAuth(); // makeAuthenticatedRequest 추가
   
   const orderId = searchParams.get('orderId');
   const paymentId = searchParams.get('paymentId');
 
   useEffect(() => {
-    if (orderId) {
+    if (orderId && user) { // user도 확인
       fetchOrderData();
+    } else if (!user) {
+      setError('로그인이 필요합니다.');
+      setLoading(false);
     } else {
       setError('주문 정보가 없습니다.');
       setLoading(false);
     }
-  }, [orderId]);
+  }, [orderId, user]); // user 의존성 추가
 
   const fetchOrderData = async () => {
     try {
-      // 주문 정보 조회
-      const orderResponse = await fetch(`/api/orders/${orderId}`);
+      console.log('📦 주문 완료 데이터 조회 시작:', orderId);
+
+      // ✅ 인증된 요청으로 주문 정보 조회
+      const orderResponse = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+      
       if (orderResponse.ok) {
         const orderResult = await orderResponse.json();
         
@@ -38,22 +44,31 @@ export default function OrderCompleteContent() {
         console.log('🔍 주문 아이템들:', orderResult.order?.items);
         
         setOrderData(orderResult.order);
+      } else {
+        const errorResult = await orderResponse.json();
+        throw new Error(errorResult.error || '주문 정보 조회 실패');
       }
   
-      // 결제 정보가 있다면 조회
+      // 결제 정보가 있다면 조회 (이것도 인증된 요청으로 변경 필요시)
       if (paymentId) {
-        const paymentResponse = await fetch(`/api/payments/${paymentId}`);
-        if (paymentResponse.ok) {
-          const paymentResult = await paymentResponse.json();
-          
-          console.log('💳 전체 결제 데이터:', paymentResult);
-          
-          setPaymentData(paymentResult.payment);
+        try {
+          // 결제 API도 인증이 필요하다면 makeAuthenticatedRequest 사용
+          const paymentResponse = await makeAuthenticatedRequest(`/api/payments/${paymentId}`);
+          if (paymentResponse.ok) {
+            const paymentResult = await paymentResponse.json();
+            
+            console.log('💳 전체 결제 데이터:', paymentResult);
+            
+            setPaymentData(paymentResult.payment);
+          }
+        } catch (paymentError) {
+          console.warn('결제 정보 조회 실패 (선택사항):', paymentError);
+          // 결제 정보는 필수가 아니므로 에러로 처리하지 않음
         }
       }
     } catch (error) {
       console.error('데이터 조회 오류:', error);
-      setError('주문 정보를 불러오는 중 오류가 발생했습니다.');
+      setError(`주문 정보를 불러오는 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -83,7 +98,7 @@ export default function OrderCompleteContent() {
     }
   };
 
-  // 파일 다운로드 함수
+  // ✅ 파일 다운로드 함수도 인증된 요청으로 수정
   const handleDownload = async (productId, fileId, filename) => {
     if (!user?.id) {
       alert('로그인이 필요합니다.');
@@ -102,13 +117,11 @@ export default function OrderCompleteContent() {
 
       console.log('📥 다운로드 시작:', { orderId, fileId, filename });
 
-      const response = await fetch(
-        `/api/download/${orderId}/${fileId}?userId=${user.id}`,
+      // ✅ 인증된 요청으로 변경
+      const response = await makeAuthenticatedRequest(
+        `/api/download/${orderId}/${fileId}`,
         {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          method: 'GET'
         }
       );
 
@@ -140,6 +153,9 @@ export default function OrderCompleteContent() {
         alert('다운로드 기간이 만료되었습니다.\n고객센터(jasonincompany@gmail.com)로 문의해주세요.');
       } else if (error.message.includes('권한')) {
         alert('해당 파일에 대한 다운로드 권한이 없습니다.');
+      } else if (error.message.includes('인증') || error.message.includes('토큰')) {
+        alert('로그인이 만료되었습니다. 다시 로그인해주세요.');
+        router.push('/');
       } else {
         alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
       }
@@ -238,6 +254,29 @@ export default function OrderCompleteContent() {
     }
     return 0;
   };
+
+  // 로그인되지 않은 경우
+  if (!user) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-md mx-auto text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-yellow-600 mb-4">로그인이 필요합니다</h1>
+          <p className="text-gray-600 mb-6">주문 완료 정보를 확인하려면 로그인해주세요.</p>
+          <button
+            onClick={() => router.push('/')}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            홈으로 가서 로그인하기
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -421,7 +460,7 @@ export default function OrderCompleteContent() {
   );
 }
 
-// 상품별 다운로드 컴포넌트
+// 상품별 다운로드 컴포넌트 (기존과 동일하게 유지)
 function ProductWithDownloads({ 
   item, 
   canDownload, 
@@ -437,7 +476,7 @@ function ProductWithDownloads({
   useEffect(() => {
     const fetchProductFiles = async () => {
       try {
-        const { getSupabase } = await import('../../../lib/supabase'); // 경로 수정
+        const { getSupabase } = await import('../../../lib/supabase');
         const supabase = getSupabase();
         
         const { data: product, error } = await supabase

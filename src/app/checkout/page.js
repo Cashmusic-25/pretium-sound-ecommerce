@@ -16,7 +16,7 @@ export default function CheckoutPage() {
   });
   
   const { items: cart = [], getTotalPrice, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, makeAuthenticatedRequest } = useAuth(); // makeAuthenticatedRequest 추가
   const router = useRouter();
 
   // 디버깅용 코드
@@ -125,18 +125,24 @@ export default function CheckoutPage() {
     setIsLoading(true);
     
     try {
-      // 주문 ID 생성 (UUID 형태)
-      const orderId = crypto.randomUUID();
+      // 주문 ID 생성 (text 타입에 맞게 수정)
+      const orderId = `PS${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const amount = getTotalPrice();
       
       console.log('V2 결제 시도 - 금액:', amount, '장바구니:', cart, '결제방법:', paymentMethod);
 
-      // 서버에 주문 정보 사전 등록
-      const orderResponse = await fetch('/api/orders', {
+      // ✅ 서버에 주문 정보 사전 등록 - 인증된 요청으로 변경
+      console.log('📦 주문 생성 요청 데이터:', {
+        orderId,
+        userId: user.id,
+        items: cart,
+        totalAmount: amount,
+        shippingAddress: shippingInfo,
+        status: 'pending'
+      });
+
+      const orderResponse = await makeAuthenticatedRequest('/api/orders', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           orderId,
           userId: user.id,
@@ -147,9 +153,30 @@ export default function CheckoutPage() {
         }),
       });
 
-      if (!orderResponse.ok) {
-        throw new Error('주문 생성 실패');
+      console.log('📦 주문 응답 상태:', orderResponse.status);
+      console.log('📦 주문 응답 헤더:', Object.fromEntries(orderResponse.headers.entries()));
+
+      let orderResult;
+      try {
+        orderResult = await orderResponse.json();
+        console.log('📦 주문 응답 데이터:', orderResult);
+      } catch (jsonError) {
+        console.error('❌ JSON 파싱 실패:', jsonError);
+        const responseText = await orderResponse.text();
+        console.error('❌ 실제 응답 내용:', responseText);
+        throw new Error(`서버 응답을 해석할 수 없습니다: ${responseText.slice(0, 200)}`);
       }
+
+      if (!orderResponse.ok) {
+        console.error('❌ 주문 생성 실패 상세:', {
+          status: orderResponse.status,
+          statusText: orderResponse.statusText,
+          result: orderResult
+        });
+        throw new Error(orderResult?.error || orderResult?.message || `주문 생성 실패 (${orderResponse.status})`);
+      }
+
+      console.log('✅ 주문 생성 성공:', orderResult);
 
       // 포트원 V2 스크립트 로드 대기
       await waitForPortOne();
@@ -179,7 +206,15 @@ export default function CheckoutPage() {
       }
     } catch (error) {
       console.error('결제 오류:', error);
-      alert('결제 중 오류가 발생했습니다.');
+      
+      // 인증 관련 에러 처리
+      if (error.message.includes('인증') || error.message.includes('토큰')) {
+        alert('로그인이 만료되었습니다. 다시 로그인해주세요.');
+        router.push('/');
+      } else {
+        alert(`결제 중 오류가 발생했습니다: ${error.message}`);
+      }
+      
       setIsLoading(false);
     }
   };
@@ -188,12 +223,9 @@ export default function CheckoutPage() {
     try {
       console.log('V2 결제 성공 처리 시작:', { paymentId, merchantUid });
       
-      // 결제 완료 후 검증
-      const verifyResponse = await fetch('/api/payments/verify', {
+      // ✅ 결제 완료 후 검증 - 인증된 요청으로 변경
+      const verifyResponse = await makeAuthenticatedRequest('/api/payments/verify', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           paymentId: paymentId,
           orderId: merchantUid,

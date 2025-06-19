@@ -9,11 +9,12 @@ import Header from '../components/Header'
 
 export default function OrdersPage() {
   const router = useRouter()
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, makeAuthenticatedRequest } = useAuth()
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [downloadingFiles, setDownloadingFiles] = useState(new Set())
+  
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -21,41 +22,28 @@ export default function OrdersPage() {
       return
     }
   
-    // Supabase에서 사용자의 주문 내역 불러오기
+    // ✅ 인증된 API 요청으로 주문 내역 불러오기
     const loadUserOrders = async () => {
       try {
         setIsLoading(true)
         
-        const { getSupabase } = await import('@/lib/supabase')
-        const supabase = getSupabase()
-        
-        if (!supabase || !user) {
-          console.warn('Supabase 또는 user 없음')
-          setOrders([])
-          return
-        }
-  
         console.log('📦 사용자 주문 조회 시작:', user.id)
   
-        // 현재 사용자의 주문만 조회
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-  
-        if (error) {
-          console.error('주문 조회 실패:', error)
-          setOrders([])
-          return
+        // ✅ makeAuthenticatedRequest를 사용한 API 호출
+        const response = await makeAuthenticatedRequest('/api/orders')
+        
+        if (!response.ok) {
+          const errorResult = await response.json()
+          throw new Error(errorResult.error || '주문 조회 실패')
         }
+
+        const result = await response.json()
+        console.log('✅ 주문 조회 성공:', result.orders.length, '개')
   
-        console.log('✅ 주문 조회 성공:', data.length, '개')
-  
-        // Supabase 데이터를 기존 형식으로 변환
-        const formattedOrders = data.map(order => ({
+        // API 응답 데이터를 기존 형식으로 변환
+        const formattedOrders = result.orders.map(order => ({
           id: order.id,
-          orderNumber: `PS${order.id}`, // 임시 주문번호
+          orderNumber: `PS${order.id}`, // 주문번호 형식
           userId: order.user_id,
           items: order.items || [],
           totalAmount: order.total_amount,
@@ -63,7 +51,7 @@ export default function OrdersPage() {
           createdAt: order.created_at,
           shipping: order.shipping_address,
           payment: {
-            method: 'card' // 임시값
+            method: 'card' // 기본값
           }
         }))
   
@@ -71,6 +59,15 @@ export default function OrdersPage() {
         
       } catch (error) {
         console.error('주문 로드 중 오류:', error)
+        
+        // 인증 관련 에러 처리
+        if (error.message.includes('인증') || error.message.includes('토큰')) {
+          alert('로그인이 만료되었습니다. 다시 로그인해주세요.')
+          router.push('/')
+        } else {
+          alert(`주문 내역을 불러오는데 실패했습니다: ${error.message}`)
+        }
+        
         setOrders([])
       } finally {
         setIsLoading(false)
@@ -78,9 +75,9 @@ export default function OrdersPage() {
     }
   
     loadUserOrders()
-  }, [isAuthenticated, user, router])
+  }, [isAuthenticated, user, router, makeAuthenticatedRequest]) // makeAuthenticatedRequest 의존성 추가
 
-  // 파일 다운로드 함수
+  // ✅ 파일 다운로드 함수 (이미 수정되어 있음)
   const handleDownload = async (orderId, productId, fileId, filename) => {
     if (!user?.id) {
       alert('로그인이 필요합니다.');
@@ -99,16 +96,13 @@ export default function OrdersPage() {
 
       console.log('📥 다운로드 시작:', { orderId, fileId, filename });
 
-      const response = await fetch(
-        `/api/download/${orderId}/${fileId}?userId=${user.id}`,
+      // ✅ 인증된 요청 사용
+      const response = await makeAuthenticatedRequest(
+        `/api/download/${orderId}/${fileId}`,
         {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          method: 'GET'
         }
       );
-
       const result = await response.json();
 
       if (!response.ok) {
@@ -137,6 +131,9 @@ export default function OrdersPage() {
         alert('다운로드 기간이 만료되었습니다.\n고객센터(jasonincompany@gmail.com)로 문의해주세요.');
       } else if (error.message.includes('권한')) {
         alert('해당 파일에 대한 다운로드 권한이 없습니다.');
+      } else if (error.message.includes('인증') || error.message.includes('토큰')) {
+        alert('로그인이 만료되었습니다. 다시 로그인해주세요.');
+        router.push('/');
       } else {
         alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
       }
@@ -172,11 +169,24 @@ export default function OrdersPage() {
     }
   };
 
+  // 가격을 안전하게 숫자로 변환하는 함수
+  const parsePrice = (priceValue) => {
+    if (typeof priceValue === 'number') {
+      return priceValue;
+    }
+    if (typeof priceValue === 'string') {
+      // ₩, 원, 쉼표 제거 후 숫자로 변환
+      return parseInt(priceValue.replace(/[₩,원]/g, '')) || 0;
+    }
+    return 0;
+  };
+
   const formatPrice = (price) => {
+    const numericPrice = parsePrice(price);
     return new Intl.NumberFormat('ko-KR', {
       style: 'currency',
       currency: 'KRW'
-    }).format(price)
+    }).format(numericPrice)
   }
 
   const getStatusColor = (status) => {
@@ -194,9 +204,9 @@ export default function OrdersPage() {
     selectedStatus === 'all' || order.status === selectedStatus
   )
 
-  // 수정된 상세보기 함수 (오류 수정)
+  // 수정된 상세보기 함수
   const handleViewOrder = (orderId) => {
-    router.push(`/order/complete?orderId=${orderId}`) // orderNumber → orderId
+    router.push(`/order/complete?orderId=${orderId}`)
   }
 
   if (!isAuthenticated) {
@@ -319,7 +329,7 @@ export default function OrdersPage() {
                             </span>
                             
                             <button
-                              onClick={() => handleViewOrder(order.id)} // 수정: order.id 사용
+                              onClick={() => handleViewOrder(order.id)}
                               className="flex items-center space-x-2 bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors text-sm"
                             >
                               <Eye size={16} />
@@ -340,6 +350,7 @@ export default function OrdersPage() {
                               onDownload={handleDownload}
                               downloadingFiles={downloadingFiles}
                               formatPrice={formatPrice}
+                              parsePrice={parsePrice} // parsePrice 함수 전달
                               getFileIcon={getFileIcon}
                             />
                           ))}
@@ -403,7 +414,7 @@ export default function OrdersPage() {
   )
 }
 
-// 개별 주문 상품 컴포넌트 (다운로드 기능 포함)
+// ✅ OrderItemWithDownloads 컴포넌트에서도 직접 Supabase 호출 제거
 function OrderItemWithDownloads({ 
   item, 
   orderId, 
@@ -411,7 +422,8 @@ function OrderItemWithDownloads({
   daysLeft, 
   onDownload, 
   downloadingFiles, 
-  formatPrice, 
+  formatPrice,
+  parsePrice, // parsePrice 함수 받기
   getFileIcon 
 }) {
   const [productFiles, setProductFiles] = useState([]);
@@ -420,6 +432,7 @@ function OrderItemWithDownloads({
   useEffect(() => {
     const fetchProductFiles = async () => {
       try {
+        // ✅ products 테이블은 RLS가 비활성화되어 있으므로 직접 조회 가능
         const { getSupabase } = await import('@/lib/supabase');
         const supabase = getSupabase();
         
@@ -462,7 +475,7 @@ function OrderItemWithDownloads({
         
         <div className="text-right">
           <p className="font-bold text-gray-800">
-            {formatPrice(item.price * item.quantity)}
+            {formatPrice(parsePrice(item.price) * item.quantity)}
           </p>
         </div>
       </div>

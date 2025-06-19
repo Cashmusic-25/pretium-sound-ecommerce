@@ -1,31 +1,46 @@
-// src/app/api/download/[orderId]/[fileId]/route.js
+// src/app/api/download/[orderId]/[fileId]/route.js - Service Role 방식 수정
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function GET(request, { params }) {
   try {
     const { orderId, fileId } = params;
-    const url = new URL(request.url);
-    const userId = url.searchParams.get('userId');
 
-    console.log('📥 다운로드 요청:', { orderId, fileId, userId });
+    console.log('📥 다운로드 요청:', { orderId, fileId });
 
-    // 1. 사용자 인증 확인
-    if (!userId) {
+    // 1. Authorization 헤더 확인
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ Authorization 헤더 없음');
       return NextResponse.json({ error: '인증이 필요합니다' }, { status: 401 });
     }
 
-    // 2. 주문 정보 조회 및 소유권 확인
-    const { data: order, error: orderError } = await supabase
+    const token = authHeader.split(' ')[1];
+    console.log('🔑 토큰 추출 완료');
+
+    // 2. 일반 클라이언트로 토큰 검증
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('❌ 인증 실패:', authError);
+      return NextResponse.json({ error: '유효하지 않은 토큰입니다' }, { status: 401 });
+    }
+
+    console.log('✅ 사용자 인증 성공:', user.email, user.id);
+
+    // 3. Service Role로 주문 정보 조회
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    
+    const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .select('*')
       .eq('id', orderId)
-      .eq('user_id', userId)  // 본인 주문만 조회 가능
+      .eq('user_id', user.id) // 본인 주문만 조회
       .single();
 
     if (orderError || !order) {
@@ -35,14 +50,14 @@ export async function GET(request, { params }) {
 
     console.log('✅ 주문 조회 성공:', order.id);
 
-    // 3. 주문 상태 확인 (결제 완료된 주문만)
+    // 4. 주문 상태 확인 (결제 완료된 주문만)
     if (order.status !== 'processing' && order.status !== 'delivered') {
       return NextResponse.json({ 
         error: '결제가 완료되지 않은 주문입니다' 
       }, { status: 403 });
     }
 
-    // 4. 다운로드 기간 확인 (2주 제한)
+    // 5. 다운로드 기간 확인 (2주 제한)
     const orderDate = new Date(order.created_at);
     const now = new Date();
     const daysDiff = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
@@ -56,15 +71,15 @@ export async function GET(request, { params }) {
 
     console.log(`📅 다운로드 기간 확인: ${daysDiff}일 경과, ${14 - daysDiff}일 남음`);
 
-    // 5. 주문한 상품에서 해당 파일이 포함되어 있는지 확인
+    // 6. 주문한 상품에서 해당 파일이 포함되어 있는지 확인
     let targetFile = null;
     let productFound = false;
 
     for (const item of order.items) {
       console.log(`🔍 상품 ${item.id} 파일 조회 중...`);
       
-      // 상품 정보를 데이터베이스에서 조회
-      const { data: product, error: productError } = await supabase
+      // 상품 정보를 데이터베이스에서 조회 (products 테이블은 RLS 비활성화됨)
+      const { data: product, error: productError } = await supabaseClient
         .from('products')
         .select('files')
         .eq('id', item.id)
@@ -96,13 +111,13 @@ export async function GET(request, { params }) {
       }, { status: 403 });
     }
 
-    // 6. 다운로드 이력 기록
-    await recordDownloadHistory(userId, orderId, fileId, targetFile.filename);
+    // 7. 다운로드 이력 기록 (Service Role 사용)
+    await recordDownloadHistory(supabaseAdmin, user.id, orderId, fileId, targetFile.filename);
 
-    // 7. Supabase Storage에서 signed URL 생성 (1시간 유효)
+    // 8. Supabase Storage에서 signed URL 생성 (Service Role 필요)
     console.log('☁️ Signed URL 생성 중:', targetFile.filePath);
     
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+    const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
       .from('ebooks')
       .createSignedUrl(targetFile.filePath, 3600); // 1시간 = 3600초
 
@@ -115,7 +130,7 @@ export async function GET(request, { params }) {
 
     console.log('✅ 다운로드 링크 생성 성공');
 
-    // 8. 다운로드 정보 반환
+    // 9. 다운로드 정보 반환
     return NextResponse.json({
       success: true,
       downloadUrl: signedUrlData.signedUrl,
@@ -134,12 +149,12 @@ export async function GET(request, { params }) {
   }
 }
 
-// 다운로드 이력 기록 함수
-async function recordDownloadHistory(userId, orderId, fileId, filename) {
+// 다운로드 이력 기록 함수 (Service Role 사용)
+async function recordDownloadHistory(supabaseAdmin, userId, orderId, fileId, filename) {
   try {
     console.log('📝 다운로드 이력 기록 중...');
     
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('download_history')
       .insert([
         {
