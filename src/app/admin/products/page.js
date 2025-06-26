@@ -363,7 +363,7 @@ export default function AdminProductsPage() {
           <div className="bg-white rounded-xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4">상품 삭제 확인</h3>
             <p className="text-gray-600 mb-6">
-              "<strong>{productToDelete?.title}</strong>" 상품을 정말 삭제하시겠습니까?
+              &ldquo;<strong>{productToDelete?.title}</strong>&rdquo; 상품을 정말 삭제하시겠습니까?
               <br />
               {productToDelete?.id <= 6 ? (
                 <span className="text-blue-600 text-sm">기본 상품은 숨김 처리됩니다.</span>
