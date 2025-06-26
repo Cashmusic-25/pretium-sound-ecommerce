@@ -5,9 +5,68 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 
+// 카카오페이 로고 컴포넌트 (실제 파일명 사용)
+const KakaoPayLogo = ({ size = 20 }) => (
+  <img 
+    src="/images/payment_icon_yellow_large.png" 
+    alt="카카오페이" 
+    style={{ height: size, width: 'auto' }}
+    className="inline-block"
+  />
+);
+
+// 신용카드 아이콘
+const CreditCardIcon = ({ size = 20 }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+    className="inline-block"
+  >
+    <rect x="2" y="6" width="20" height="12" rx="2" stroke="#666" strokeWidth="1.5" fill="none"/>
+    <path d="M2 10h20" stroke="#666" strokeWidth="1.5"/>
+    <rect x="5" y="13" width="4" height="2" rx="1" fill="#666"/>
+  </svg>
+);
+
+// 계좌이체 아이콘
+const BankIcon = ({ size = 20 }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+    className="inline-block"
+  >
+    <path d="M2 20h20v2H2v-2zM3.5 18h17l-2-8H5.5l-2 8zM12 2L2 8h20L12 2z" fill="#666"/>
+    <rect x="6" y="11" width="2" height="5" fill="white"/>
+    <rect x="11" y="11" width="2" height="5" fill="white"/>
+    <rect x="16" y="11" width="2" height="5" fill="white"/>
+  </svg>
+);
+
+// 가상계좌 아이콘
+const VirtualAccountIcon = ({ size = 20 }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+    className="inline-block"
+  >
+    <rect x="3" y="6" width="18" height="12" rx="2" stroke="#666" strokeWidth="1.5" fill="none"/>
+    <path d="M7 10h10M7 14h6" stroke="#666" strokeWidth="1.5" strokeLinecap="round"/>
+    <circle cx="16" cy="14" r="1" fill="#666"/>
+  </svg>
+);
+
 export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('card'); // 기본값: 카드
+  const [paymentMethod, setPaymentMethod] = useState('kakaopay'); // 기본값: 카카오페이
   const [shippingInfo, setShippingInfo] = useState({
     name: '',
     phone: '',
@@ -16,7 +75,7 @@ export default function CheckoutPage() {
   });
   
   const { items: cart = [], getTotalPrice, clearCart } = useCart();
-  const { user, makeAuthenticatedRequest } = useAuth(); // makeAuthenticatedRequest 추가
+  const { user, makeAuthenticatedRequest } = useAuth();
   const router = useRouter();
 
   // 디버깅용 코드
@@ -53,7 +112,7 @@ export default function CheckoutPage() {
       currency: "KRW",
       customer: {
         fullName: shippingInfo.name.trim(),
-        phoneNumber: cleanPhone, // 정리된 전화번호 사용
+        phoneNumber: cleanPhone,
         email: user.email,
       },
       redirectUrl: `${window.location.origin}/order/complete?orderId=${orderId}`,
@@ -64,31 +123,31 @@ export default function CheckoutPage() {
         return {
           ...baseConfig,
           channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "EASY_PAY", // 카카오페이는 간편결제
+          payMethod: "EASY_PAY",
         };
       case 'card':
         return {
           ...baseConfig,
           channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "CARD", // 신용카드
+          payMethod: "CARD",
         };
       case 'transfer':
         return {
           ...baseConfig,
           channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "TRANSFER", // 계좌이체
+          payMethod: "TRANSFER",
         };
       case 'vbank':
         return {
           ...baseConfig,
           channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "VIRTUAL_ACCOUNT", // 가상계좌
+          payMethod: "VIRTUAL_ACCOUNT",
         };
       default:
         return {
           ...baseConfig,
           channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "EASY_PAY", // 기본값: 간편결제
+          payMethod: "EASY_PAY",
         };
     }
   };
@@ -293,7 +352,32 @@ export default function CheckoutPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-8">주문/결제</h1>
+      {/* 헤더 영역 - 뒤로가기 버튼 포함 */}
+      <div className="flex items-center mb-8">
+        <button
+          onClick={() => router.push('/')}
+          className="mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
+          title="홈으로 돌아가기"
+        >
+          <svg 
+            width="24" 
+            height="24" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+            className="text-gray-600"
+          >
+            <path 
+              d="M19 12H5M12 19L5 12L12 5" 
+              stroke="currentColor" 
+              strokeWidth="2" 
+              strokeLinecap="round" 
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+        <h1 className="text-3xl font-bold">주문/결제</h1>
+      </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* 주문 상품 정보 */}
@@ -373,58 +457,80 @@ export default function CheckoutPage() {
           {/* 결제 방법 선택 */}
           <div className="mt-6">
             <h3 className="text-lg font-semibold mb-3">결제 방법</h3>
-            <div className="space-y-2">
-              <label className="flex items-center">
+            <div className="space-y-3">
+              {/* 카카오페이 옵션 */}
+              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                 <input 
                   type="radio" 
                   name="payMethod" 
                   value="kakaopay"
                   checked={paymentMethod === 'kakaopay'}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-2" 
+                  className="mr-3" 
                 />
-                <span className="flex items-center">
-                  카카오페이
-                  <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">추천</span>
-                </span>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center">
+                    <KakaoPayLogo size={24} />
+                    <span className="ml-2 font-medium">카카오페이</span>
+                  </div>
+                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-medium">
+                    추천
+                  </span>
+                </div>
               </label>
-              <label className="flex items-center">
+
+              {/* 신용카드 옵션 */}
+              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                 <input 
                   type="radio" 
                   name="payMethod" 
                   value="card"
                   checked={paymentMethod === 'card'}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-2" 
+                  className="mr-3" 
                 />
-                신용/체크카드
+                <div className="flex items-center">
+                  <CreditCardIcon size={24} />
+                  <span className="ml-2">신용/체크카드</span>
+                </div>
               </label>
-              <label className="flex items-center">
+
+              {/* 계좌이체 옵션 */}
+              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                 <input 
                   type="radio" 
                   name="payMethod" 
                   value="transfer"
                   checked={paymentMethod === 'transfer'}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-2" 
+                  className="mr-3" 
                 />
-                실시간 계좌이체
+                <div className="flex items-center">
+                  <BankIcon size={24} />
+                  <span className="ml-2">실시간 계좌이체</span>
+                </div>
               </label>
-              <label className="flex items-center">
+
+              {/* 가상계좌 옵션 */}
+              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                 <input 
                   type="radio" 
                   name="payMethod" 
                   value="vbank"
                   checked={paymentMethod === 'vbank'}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-2" 
+                  className="mr-3" 
                 />
-                가상계좌
+                <div className="flex items-center">
+                  <VirtualAccountIcon size={24} />
+                  <span className="ml-2">가상계좌</span>
+                </div>
               </label>
             </div>
           </div>
-          {/* 결제 버튼 바로 위에 추가 */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4 mb-4">
+
+          {/* 서비스 제공 기간 안내 */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-6 mb-4">
             <h4 className="font-semibold text-green-900 mb-2 flex items-center">
               <span className="mr-2">⏰</span>
               서비스 제공 기간 안내
@@ -438,14 +544,35 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          {/* 결제 버튼 */}
           <button
             onClick={handlePayment}
             disabled={isLoading || !shippingInfo.name || !shippingInfo.phone || !shippingInfo.address}
-            className="w-full mt-6 bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold transition-colors"
+            className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+              paymentMethod === 'kakaopay' 
+                ? 'bg-yellow-400 hover:bg-yellow-500 text-black' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            } disabled:bg-gray-400 disabled:cursor-not-allowed`}
           >
-            {isLoading ? '처리 중...' : 
-             paymentMethod === 'kakaopay' ? `카카오페이로 ${getTotalPrice().toLocaleString()}원 결제` :
-             `${getTotalPrice().toLocaleString()}원 결제하기`}
+            {isLoading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                처리 중...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center">
+                {paymentMethod === 'kakaopay' && <KakaoPayLogo size={20} />}
+                <span className={paymentMethod === 'kakaopay' ? 'ml-2' : ''}>
+                  {paymentMethod === 'kakaopay' ? 
+                    `카카오페이로 ${getTotalPrice().toLocaleString()}원 결제` :
+                    `${getTotalPrice().toLocaleString()}원 결제하기`
+                  }
+                </span>
+              </span>
+            )}
           </button>
           
           <p className="text-xs text-gray-500 mt-2 text-center">
