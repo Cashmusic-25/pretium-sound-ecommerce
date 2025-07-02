@@ -14,7 +14,6 @@ const nextConfig = {
   
   // 기타 설정들 (기존 설정이 있다면 유지)
   reactStrictMode: true,
-  swcMinify: true,
   
   // 이미지 최적화 설정 (선택사항)
   images: {
