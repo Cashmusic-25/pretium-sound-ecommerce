@@ -48,17 +48,48 @@ export default function Header() {
     }
   }
 
+  const handleHomeClick = () => {
+    router.push('/')
+    setIsMenuOpen(false)
+  }
+
   return (
     <>
       <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627', borderBottomColor: '#404041'}}>
         <nav className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            {/* 로고 */}
+            {/* 로고 섹션 - 이미지 파일 + 텍스트 */}
             <div 
-              className="text-2xl font-bold gradient-text cursor-pointer"
-              onClick={() => router.push('/')}
+              className="flex items-center space-x-3 cursor-pointer group"
+              onClick={handleHomeClick}
             >
-              Pretium Sound
+              {/* 로고 이미지 */}
+              <div className="w-10 h-10 rounded-lg overflow-hidden group-hover:scale-105 transition-transform duration-200">
+                <img 
+                  src="/images/logo.png" 
+                  alt="Pretium Sound Logo" 
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    // 이미지 로드 실패시 기본 음표 아이콘으로 대체
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+                {/* 이미지 로드 실패시 보여줄 기본 아이콘 */}
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center" style={{display: 'none'}}>
+                  <svg 
+                    className="w-6 h-6 text-white" 
+                    fill="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
+                </div>
+              </div>
+              {/* 브랜드 텍스트 */}
+              <div className="text-2xl font-bold gradient-text group-hover:text-blue-400 transition-colors duration-200">
+                Pretium Sound
+              </div>
             </div>
 
             {/* 데스크톱 네비게이션 */}

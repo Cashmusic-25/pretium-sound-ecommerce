@@ -13,13 +13,13 @@ export default function OrderCompleteContent() {
   
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, makeAuthenticatedRequest } = useAuth(); // makeAuthenticatedRequest 추가
+  const { user, makeAuthenticatedRequest } = useAuth();
   
   const orderId = searchParams.get('orderId');
   const paymentId = searchParams.get('paymentId');
 
   useEffect(() => {
-    if (orderId && user) { // user도 확인
+    if (orderId && user) {
       fetchOrderData();
     } else if (!user) {
       setError('로그인이 필요합니다.');
@@ -28,42 +28,31 @@ export default function OrderCompleteContent() {
       setError('주문 정보가 없습니다.');
       setLoading(false);
     }
-  }, [orderId, user]); // user 의존성 추가
+  }, [orderId, user]);
 
   const fetchOrderData = async () => {
     try {
       console.log('📦 주문 완료 데이터 조회 시작:', orderId);
 
-      // ✅ 인증된 요청으로 주문 정보 조회
       const orderResponse = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
       
       if (orderResponse.ok) {
         const orderResult = await orderResponse.json();
-        
-        console.log('🔍 전체 주문 데이터:', orderResult);
-        console.log('🔍 주문 아이템들:', orderResult.order?.items);
-        
         setOrderData(orderResult.order);
       } else {
         const errorResult = await orderResponse.json();
         throw new Error(errorResult.error || '주문 정보 조회 실패');
       }
   
-      // 결제 정보가 있다면 조회 (이것도 인증된 요청으로 변경 필요시)
       if (paymentId) {
         try {
-          // 결제 API도 인증이 필요하다면 makeAuthenticatedRequest 사용
           const paymentResponse = await makeAuthenticatedRequest(`/api/payments/${paymentId}`);
           if (paymentResponse.ok) {
             const paymentResult = await paymentResponse.json();
-            
-            console.log('💳 전체 결제 데이터:', paymentResult);
-            
             setPaymentData(paymentResult.payment);
           }
         } catch (paymentError) {
           console.warn('결제 정보 조회 실패 (선택사항):', paymentError);
-          // 결제 정보는 필수가 아니므로 에러로 처리하지 않음
         }
       }
     } catch (error) {
@@ -74,31 +63,6 @@ export default function OrderCompleteContent() {
     }
   };
 
-  // 상품 정보 조회 함수 (files 정보 포함)
-  const fetchProductWithFiles = async (productId) => {
-    try {
-      const { getSupabase } = await import('../../../lib/supabase'); // 경로 수정
-      const supabase = getSupabase();
-      
-      const { data: product, error } = await supabase
-        .from('products')
-        .select('files')
-        .eq('id', productId)
-        .single();
-
-      if (error) {
-        console.error('상품 조회 오류:', error);
-        return null;
-      }
-
-      return product;
-    } catch (error) {
-      console.error('상품 조회 중 오류:', error);
-      return null;
-    }
-  };
-
-  // ✅ 파일 다운로드 함수도 인증된 요청으로 수정
   const handleDownload = async (productId, fileId, filename) => {
     if (!user?.id) {
       alert('로그인이 필요합니다.');
@@ -107,7 +71,6 @@ export default function OrderCompleteContent() {
 
     const downloadKey = `${productId}-${fileId}`;
     
-    // 이미 다운로드 중이면 중복 요청 방지
     if (downloadingFiles.has(downloadKey)) {
       return;
     }
@@ -117,12 +80,9 @@ export default function OrderCompleteContent() {
 
       console.log('📥 다운로드 시작:', { orderId, fileId, filename });
 
-      // ✅ 인증된 요청으로 변경
       const response = await makeAuthenticatedRequest(
         `/api/download/${orderId}/${fileId}`,
-        {
-          method: 'GET'
-        }
+        { method: 'GET' }
       );
 
       const result = await response.json();
@@ -142,13 +102,13 @@ export default function OrderCompleteContent() {
 
       console.log('✅ 다운로드 성공');
       
-      // 성공 알림
-      alert(`${filename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${result.remainingDays}일`);
+      // 법적 조치 문구와 함께 성공 알림
+      const alertMessage = `${filename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${result.remainingDays}일\n\n${result.legalNotice || '⚠️ 저작권 보호 안내: 본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다.'}`;
+      alert(alertMessage);
 
     } catch (error) {
       console.error('❌ 다운로드 오류:', error);
       
-      // 사용자 친화적 오류 메시지
       if (error.message.includes('만료')) {
         alert('다운로드 기간이 만료되었습니다.\n고객센터(jasonincompany@gmail.com)로 문의해주세요.');
       } else if (error.message.includes('권한')) {
@@ -168,20 +128,18 @@ export default function OrderCompleteContent() {
     }
   };
 
-  // 다운로드 가능 여부 확인
   const canDownload = (status) => {
     return status === 'processing' || status === 'delivered';
   };
 
-  // 다운로드 기간 계산
+  // 다운로드 기간 계산 (1년 = 365일)
   const getDownloadDaysLeft = (createdAt) => {
     const orderDate = new Date(createdAt);
     const now = new Date();
     const daysDiff = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
-    return Math.max(0, 14 - daysDiff);
+    return Math.max(0, 365 - daysDiff);
   };
 
-  // 파일 아이콘 결정
   const getFileIcon = (type) => {
     switch (type) {
       case 'pdf': return '📄';
@@ -244,7 +202,6 @@ export default function OrderCompleteContent() {
     return methodMap[method] || method || '알 수 없음';
   };
 
-  // 가격을 안전하게 숫자로 변환하는 함수
   const parsePrice = (priceValue) => {
     if (typeof priceValue === 'number') {
       return priceValue;
@@ -255,7 +212,6 @@ export default function OrderCompleteContent() {
     return 0;
   };
 
-  // 로그인되지 않은 경우
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -413,6 +369,26 @@ export default function OrderCompleteContent() {
             </div>
           </div>
 
+          {/* 저작권 보호 안내 추가 */}
+          <div className="mb-8 p-4 bg-red-50 border-l-4 border-red-400 rounded">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">저작권 보호 안내</h3>
+                <div className="mt-2 text-sm text-red-700">
+                  <p>
+                    본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유, 재판매 시 법적 조치를 받을 수 있습니다.
+                    구매하신 교재는 개인 학습 목적으로만 사용해주시기 바랍니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 배송 정보 */}
           {orderData.shipping_address && (
             <div className="mb-8">
@@ -460,7 +436,7 @@ export default function OrderCompleteContent() {
   );
 }
 
-// 상품별 다운로드 컴포넌트 (기존과 동일하게 유지)
+// 상품별 다운로드 컴포넌트
 function ProductWithDownloads({ 
   item, 
   canDownload, 
@@ -562,8 +538,24 @@ function ProductWithDownloads({
           <div className="mt-3 p-3 bg-yellow-50 rounded border-l-4 border-yellow-400">
             <p className="text-xs text-yellow-800">
               ⚠️ 다운로드 링크는 보안을 위해 1시간 후 만료됩니다. 
-              구매일로부터 2주간 다운로드 가능합니다.
+              구매일로부터 1년간 다운로드 가능합니다.
             </p>
+          </div>
+          
+          {/* 저작권 보호 안내 */}
+          <div className="mt-3 p-3 bg-red-50 rounded border-l-4 border-red-400">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-4 w-4 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-2">
+                <p className="text-xs text-red-800 font-medium">
+                  저작권 보호: 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

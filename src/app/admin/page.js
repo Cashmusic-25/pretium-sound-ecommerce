@@ -6,14 +6,12 @@ import {
   getSalesStats, 
   getUserStats, 
   getProductStats, 
-  getReviewStats,
   getRecentOrders,
   getPopularProducts 
 } from '../../data/productHelpers'
 import { 
   Users, 
   ShoppingBag, 
-  Star, 
   TrendingUp, 
   DollarSign,
   Package,
@@ -24,22 +22,17 @@ import {
   Eye,
   Settings
 } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'  // ✅ 이 줄이 빠져있었음!
+import { useAuth } from '../contexts/AuthContext'
 import Header from '../components/Header'
 
 export default function AdminDashboard() {
   const router = useRouter()
   
-  // ✅ useAuth에서 getSalesStats 제거
-  const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders, getAllReviews } = useAuth()
-  
-  // ❌ 기존 (getSalesStats가 두 번 import됨)
-  // const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders, getAllReviews, getSalesStats } = useAuth()
+  const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders } = useAuth()
   
   const [stats, setStats] = useState(null)
   const [allUsers, setAllUsers] = useState([])
   const [recentOrders, setRecentOrders] = useState([])
-  const [recentReviews, setRecentReviews] = useState([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -48,7 +41,6 @@ export default function AdminDashboard() {
       return
     }
   
-    // 관리자 데이터 로드
     loadAdminData()
   }, [isAdmin, router])
 
@@ -58,8 +50,8 @@ export default function AdminDashboard() {
     try {
       console.log('🔧 getSalesStats 함수 타입:', typeof getSalesStats)
       
-      // 병렬로 모든 데이터 로드
-      const [salesStats, userStats, productStats, reviewStats, recentOrdersData, popularProducts] = await Promise.all([
+      // 병렬로 모든 데이터 로드 (리뷰 관련 제거)
+      const [salesStats, userStats, productStats, recentOrdersData, popularProducts] = await Promise.all([
         getSalesStats().catch(err => {
           console.error('Sales Stats 로드 실패:', err)
           return {
@@ -89,15 +81,6 @@ export default function AdminDashboard() {
             totalValue: 270000
           }
         }),
-        getReviewStats().catch(err => {
-          console.error('Review Stats 로드 실패:', err)
-          return {
-            totalReviews: 89,
-            monthlyReviews: 12,
-            averageRating: 4.3,
-            reviewGrowth: 25.5
-          }
-        }),
         getRecentOrders().catch(err => {
           console.error('Recent Orders 로드 실패:', err)
           return []
@@ -110,7 +93,7 @@ export default function AdminDashboard() {
   
       console.log('✅ 모든 통계 데이터 로드 완료')
   
-      // 통계 설정
+      // 통계 설정 (리뷰 관련 제거)
       setStats({
         totalRevenue: salesStats.totalSales || 0,
         totalOrders: salesStats.totalOrders || 0,
@@ -120,34 +103,11 @@ export default function AdminDashboard() {
         monthlyGrowth: salesStats.salesGrowth || 0,
         totalUsers: userStats.totalUsers || 0,
         newUsersThisMonth: userStats.monthlyUsers || 0,
-        totalReviews: reviewStats.totalReviews || 0,
         totalProducts: productStats.totalProducts || 0
       })
   
       // 최근 주문 설정
       setRecentOrders(recentOrdersData.slice(0, 5))
-  
-      // 최근 리뷰는 getAllReviews 대신 더미 데이터 사용
-      setRecentReviews([
-        {
-          id: 1,
-          userName: '김음악',
-          rating: 5,
-          title: '정말 좋은 교재예요!',
-          content: '체계적으로 잘 정리되어 있어서 학습하기 좋습니다.',
-          helpful_count: 5,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 2,
-          userName: '이기타',
-          rating: 4,
-          title: '초보자에게 추천',
-          content: '기초부터 차근차근 설명해주어서 이해하기 쉬웠어요.',
-          helpful_count: 3,
-          created_at: new Date(Date.now() - 86400000).toISOString()
-        }
-      ])
   
     } catch (error) {
       console.error('관리자 데이터 로드 실패:', error)
@@ -233,8 +193,8 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* 통계 카드들 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* 통계 카드들 (3개로 축소) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* 총 매출 */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <div className="flex items-center justify-between">
@@ -298,140 +258,64 @@ export default function AdminDashboard() {
                 </p>
               </div>
             </div>
-
-            {/* 총 리뷰 */}
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">총 리뷰</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats?.totalReviews || 0}</p>
-                </div>
-                <div className="bg-yellow-100 p-3 rounded-full">
-                  <Star className="text-yellow-600" size={24} />
-                </div>
-              </div>
-              <div className="mt-4">
-                <p className="text-sm text-gray-500">
-                  고객 만족도 관리
-                </p>
-              </div>
-            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* 최근 주문 */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-800">최근 주문</h3>
-                  <button
-                    onClick={() => router.push('/admin/orders')}
-                    className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-1"
-                  >
-                    <span>전체 보기</span>
-                    <Eye size={16} />
-                  </button>
-                </div>
+          {/* 최근 주문만 표시 (리뷰 섹션 제거) */}
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-800">최근 주문</h3>
+                <button
+                  onClick={() => router.push('/admin/orders')}
+                  className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-1"
+                >
+                  <span>전체 보기</span>
+                  <Eye size={16} />
+                </button>
               </div>
+            </div>
 
-              <div className="divide-y divide-gray-200">
-                {recentOrders.length > 0 ? (
-                  recentOrders.map((order) => (
-                    <div key={order.id} className="p-4 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <p className="font-medium text-gray-800">{order.customer || order.customerName || '알 수 없음'}</p>
-                          <p className="text-sm text-gray-600">
-                            주문번호: #{order.id ? String(order.id).slice(0, 8) : 'N/A'}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-gray-800">
-                            {formatPrice(order.amount || order.total_amount || 0)}
-                          </p>
-                          <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status || 'pending')}`}>
-                            {getStatusLabel(order.status || 'pending')}
-                          </span>
-                        </div>
+            <div className="divide-y divide-gray-200">
+              {recentOrders.length > 0 ? (
+                recentOrders.map((order) => (
+                  <div key={order.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="font-medium text-gray-800">{order.customer || order.customerName || '알 수 없음'}</p>
+                        <p className="text-sm text-gray-600">
+                          주문번호: #{order.id ? String(order.id).slice(0, 8) : 'N/A'}
+                        </p>
                       </div>
-                      <div className="flex items-center justify-between text-sm text-gray-500">
-                        <span>{order.items?.length || 1}개 상품</span>
-                        <span>
-                          {order.date ? new Date(order.date).toLocaleDateString('ko-KR') : 
-                          order.created_at ? new Date(order.created_at).toLocaleDateString('ko-KR') : 
-                          '날짜 없음'}
+                      <div className="text-right">
+                        <p className="font-bold text-gray-800">
+                          {formatPrice(order.amount || order.total_amount || 0)}
+                        </p>
+                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(order.status || 'pending')}`}>
+                          {getStatusLabel(order.status || 'pending')}
                         </span>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-gray-500">
-                    <ShoppingBag size={48} className="mx-auto mb-4 text-gray-300" />
-                    <p>아직 주문이 없습니다</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 최근 리뷰 */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-800">최근 리뷰</h3>
-                  <button
-                    onClick={() => router.push('/admin/reviews')}
-                    className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-1"
-                  >
-                    <span>전체 보기</span>
-                    <Eye size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="divide-y divide-gray-200">
-                {recentReviews.length > 0 ? (
-                  recentReviews.map((review) => (
-                    <div key={review.id} className="p-4 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <p className="font-medium text-gray-800">{review.userName || '알 수 없음'}</p>
-                            <div className="flex">
-                              {[...Array(5)].map((_, i) => (
-                                <Star
-                                  key={i}
-                                  size={14}
-                                  className={`${
-                                    i < (review.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                          {review.title && (
-                            <p className="font-medium text-gray-700 text-sm mb-1">{review.title}</p>
-                          )}
-                          <p className="text-sm text-gray-600 line-clamp-2">{review.content}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span>도움이 됨 {review.helpful_count || 0}</span>
-                        <span>{new Date(review.created_at).toLocaleDateString('ko-KR')}</span>
-                      </div>
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <span>{order.items?.length || 1}개 상품</span>
+                      <span>
+                        {order.date ? new Date(order.date).toLocaleDateString('ko-KR') : 
+                        order.created_at ? new Date(order.created_at).toLocaleDateString('ko-KR') : 
+                        '날짜 없음'}
+                      </span>
                     </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-gray-500">
-                    <Star size={48} className="mx-auto mb-4 text-gray-300" />
-                    <p>아직 리뷰가 없습니다</p>
                   </div>
-                )}
-              </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500">
+                  <ShoppingBag size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p>아직 주문이 없습니다</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 월간 매출 차트 (간단한 바 차트) */}
-          <div className="mt-8 bg-white rounded-xl shadow-lg p-6">
+          {/* 월간 매출 차트 */}
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-gray-800">월간 매출 현황</h3>
               <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -440,7 +324,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* 간단한 매출 정보 표시 */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-sm text-gray-600">이번 달 매출</p>
@@ -465,8 +348,8 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* 빠른 액션 버튼들 */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* 빠른 액션 버튼들 (리뷰 관리 제거) */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button
               onClick={() => router.push('/admin/products')}
               className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 text-left group"
@@ -513,16 +396,16 @@ export default function AdminDashboard() {
             </button>
 
             <button
-              onClick={() => router.push('/admin/reviews')}
+              onClick={() => router.push('/admin/sales')}
               className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 text-left group"
             >
               <div className="flex items-center space-x-4">
-                <div className="bg-yellow-100 p-3 rounded-lg group-hover:bg-yellow-200 transition-colors">
-                  <Star className="text-yellow-600" size={24} />
+                <div className="bg-orange-100 p-3 rounded-lg group-hover:bg-orange-200 transition-colors">
+                  <BarChart3 className="text-orange-600" size={24} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-gray-800">리뷰 관리</h4>
-                  <p className="text-sm text-gray-600">고객 리뷰 모니터링</p>
+                  <h4 className="font-bold text-gray-800">매출 통계</h4>
+                  <p className="text-sm text-gray-600">교재별 판매 분석</p>
                 </div>
               </div>
             </button>

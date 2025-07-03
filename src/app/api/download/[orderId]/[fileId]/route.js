@@ -1,4 +1,4 @@
-// src/app/api/download/[orderId]/[fileId]/route.js - Service Role 방식 수정
+// src/app/api/download/[orderId]/[fileId]/route.js - 1년 기간 + 법적 조치 문구 추가
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
@@ -57,19 +57,19 @@ export async function GET(request, { params }) {
       }, { status: 403 });
     }
 
-    // 5. 다운로드 기간 확인 (2주 제한)
+    // 5. 다운로드 기간 확인 (1년 = 365일 제한)
     const orderDate = new Date(order.created_at);
     const now = new Date();
     const daysDiff = Math.floor((now - orderDate) / (1000 * 60 * 60 * 24));
     
-    if (daysDiff > 14) {
+    if (daysDiff > 365) {
       return NextResponse.json({ 
         error: '다운로드 기간이 만료되었습니다. 고객센터에 문의해주세요.',
         expiredDays: daysDiff 
       }, { status: 403 });
     }
 
-    console.log(`📅 다운로드 기간 확인: ${daysDiff}일 경과, ${14 - daysDiff}일 남음`);
+    console.log(`📅 다운로드 기간 확인: ${daysDiff}일 경과, ${365 - daysDiff}일 남음`);
 
     // 6. 주문한 상품에서 해당 파일이 포함되어 있는지 확인
     let targetFile = null;
@@ -130,14 +130,15 @@ export async function GET(request, { params }) {
 
     console.log('✅ 다운로드 링크 생성 성공');
 
-    // 9. 다운로드 정보 반환
+    // 9. 다운로드 정보 반환 (법적 조치 문구 포함)
     return NextResponse.json({
       success: true,
       downloadUrl: signedUrlData.signedUrl,
       filename: targetFile.filename,
       fileSize: targetFile.size,
       expiresIn: 3600, // 1시간
-      remainingDays: 14 - daysDiff
+      remainingDays: 365 - daysDiff,
+      legalNotice: "⚠️ 저작권 보호 안내: 본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다."
     });
 
   } catch (error) {

@@ -2,18 +2,16 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ShoppingCart, Heart, Star, Plus, Minus, Play, Download, Book, Award, Users, Clock } from 'lucide-react'
+import { ArrowLeft, ShoppingCart, Heart, Plus, Minus, Book, Award, Users } from 'lucide-react'
 import { useCart } from '../../contexts/CartContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { getVisibleProductById } from '../../../data/productHelpers'
 import Header from '../../components/Header'
-import StarRating from '../../components/StarRating'
-import ReviewModal from '../../components/ReviewModal'
 
 export default function ProductPage({ params }) {
   const router = useRouter()
   const { addToCart } = useCart()
-  const { user, isAuthenticated, toggleWishlist, hasPurchasedProduct, hasReviewedProduct, addReview, updateReview, deleteReview, toggleReviewHelpful } = useAuth()
+  const { user, isAuthenticated, toggleWishlist, hasPurchasedProduct } = useAuth()
   
   // Next.js 15에서 params는 Promise이므로 use()로 unwrap
   const resolvedParams = use(params)
@@ -23,13 +21,7 @@ export default function ProductPage({ params }) {
   const [error, setError] = useState(null)
   const [quantity, setQuantity] = useState(1)
   const [activeTab, setActiveTab] = useState('description')
-  const [reviews, setReviews] = useState([])
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
-  const [editingReview, setEditingReview] = useState(null)
-  const [reviewFilter, setReviewFilter] = useState('all')
-  const [reviewSort, setReviewSort] = useState('newest')
   const [isPurchased, setIsPurchased] = useState(false)
-  const [hasReviewed, setHasReviewed] = useState(false)
 
   useEffect(() => {
     if (resolvedParams?.id) {
@@ -37,35 +29,24 @@ export default function ProductPage({ params }) {
     }
   }, [resolvedParams?.id])
 
-  useEffect(() => {
-    if (product) {
-      loadReviews() // async 함수이지만 await 없이 호출
-    }
-  }, [product])
-
-  // useEffect 추가
+  // 구매 상태 확인
   useEffect(() => {
     const checkPurchaseStatus = async () => {
       if (product && user && hasPurchasedProduct) {
         const purchased = await hasPurchasedProduct(product.id)
         setIsPurchased(purchased)
-        
-        if (hasReviewedProduct) {
-          const reviewed = await hasReviewedProduct(product.id)
-          setHasReviewed(reviewed)
-        }
       }
     }
     
     checkPurchaseStatus()
-  }, [product, user, hasPurchasedProduct, hasReviewedProduct])
+  }, [product, user, hasPurchasedProduct])
 
-  const loadProduct = async () => {  // ✅ async 추가
+  const loadProduct = async () => {
     setLoading(true)
     setError(null)
     
     try {
-      const productData = await getVisibleProductById(resolvedParams.id)  // ✅ await 추가
+      const productData = await getVisibleProductById(resolvedParams.id)
       if (!productData) {
         setError('상품을 찾을 수 없습니다.')
         return
@@ -79,85 +60,6 @@ export default function ProductPage({ params }) {
     }
   }
 
-  const loadReviews = async () => {
-    if (!product) return
-  
-    try {
-      const { getSupabase } = await import('@/lib/supabase')
-      const supabase = getSupabase()
-      
-      if (!supabase) {
-        console.warn('Supabase 연결 실패, localStorage 사용')
-        // 백업: localStorage에서 리뷰 로드
-        const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
-        const productReviews = allReviews.filter(review => review.productId === product.id)
-        const defaultReviews = product.reviews || []
-        const combinedReviews = [...defaultReviews, ...productReviews]
-        setReviews(combinedReviews)
-        return
-      }
-  
-      console.log('📝 리뷰 로드 시작:', product.id)
-  
-      // Supabase에서 해당 상품의 리뷰 조회 (사용자 정보 포함)
-      const { data, error } = await supabase
-        .from('reviews')
-        .select(`
-          *,
-          users (
-            name,
-            email
-          )
-        `)
-        .eq('product_id', product.id)
-        .order('created_at', { ascending: false })
-  
-      if (error) {
-        console.error('리뷰 조회 실패:', error)
-        // 에러 시 localStorage 백업 사용
-        const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]')
-        const productReviews = allReviews.filter(review => review.productId === product.id)
-        setReviews(productReviews)
-        return
-      }
-  
-      console.log('✅ 리뷰 조회 성공:', data.length, '개')
-  
-      // Supabase 데이터를 기존 형식으로 변환
-      const formattedReviews = data.map(review => ({
-        id: review.id,
-        userId: review.user_id,
-        user_id: review.user_id,
-        userName: review.users?.name || '사용자',
-        user_name: review.users?.name || '사용자',
-        productId: review.product_id,
-        product_id: review.product_id,
-        rating: review.rating,
-        title: review.title,
-        content: review.content,
-        photos: review.photos || [],
-        verified: review.verified || true,
-        helpful_count: review.helpful_count || 0,
-        helpful: review.helpful_count || 0,
-        helpfulUsers: [],
-        createdAt: review.created_at,
-        created_at: review.created_at,
-        updatedAt: review.updated_at,
-        updated_at: review.updated_at
-      }))
-  
-      // 기존 정적 리뷰도 포함 (있다면)
-      const defaultReviews = product.reviews || []
-      const allReviews = [...formattedReviews, ...defaultReviews]
-      
-      setReviews(allReviews)
-  
-    } catch (error) {
-      console.error('리뷰 로드 중 오류:', error)
-      // 최종 백업: 기존 상품 리뷰만 사용
-      setReviews(product.reviews || [])
-    }
-  }
   const handleAddToCart = () => {
     if (!product) return
     
@@ -190,121 +92,6 @@ export default function ProductPage({ params }) {
       console.error('위시리스트 토글 실패:', error)
       alert('위시리스트 업데이트에 실패했습니다.')
     }
-  }
-
-  const handleReviewSubmit = async (reviewData, isEdit = false) => {
-    try {
-      if (isEdit && editingReview) {
-        await updateReview(editingReview.id, reviewData)
-      } else {
-        await addReview({
-          ...reviewData,
-          product_id: product.id,
-          productId: product.id
-        })
-      }
-      
-      // 리뷰 목록 새로고침 (Supabase에서 최신 데이터 가져오기)
-      await loadReviews()
-      
-      setIsReviewModalOpen(false)
-      setEditingReview(null)
-      alert(isEdit ? '리뷰가 수정되었습니다!' : '리뷰가 작성되었습니다!')
-    } catch (error) {
-      console.error('리뷰 처리 실패:', error)
-      throw new Error(error.message || (isEdit ? '리뷰 수정에 실패했습니다.' : '리뷰 작성에 실패했습니다.'))
-    }
-  }
-
-  const handleReviewEdit = (review) => {
-    setEditingReview(review)
-    setIsReviewModalOpen(true)
-  }
-
-  const handleReviewDelete = async (reviewId) => {
-    if (!window.confirm('리뷰를 삭제하시겠습니까?')) return
-    
-    try {
-      await deleteReview(reviewId)
-      
-      // 리뷰 목록 새로고침
-      await loadReviews()
-      
-      alert('리뷰가 삭제되었습니다.')
-    } catch (error) {
-      console.error('리뷰 삭제 실패:', error)
-      alert('리뷰 삭제에 실패했습니다.')
-    }
-  }
-
-  const handleReviewHelpful = async (reviewId) => {
-    if (!isAuthenticated) {
-      alert('로그인이 필요한 서비스입니다.')
-      return
-    }
-    
-    try {
-      await toggleReviewHelpful(reviewId)
-      loadReviews()
-    } catch (error) {
-      console.error('리뷰 도움됨 토글 실패:', error)
-    }
-  }
-
-  const getFilteredReviews = () => {
-    let filtered = [...reviews]
-
-    // 평점 필터
-    if (reviewFilter !== 'all') {
-      filtered = filtered.filter(review => review.rating === parseInt(reviewFilter))
-    }
-
-    // 정렬
-    switch (reviewSort) {
-      case 'newest':
-        filtered.sort((a, b) => new Date(b.createdAt || b.created_at || Date.now()) - new Date(a.createdAt || a.created_at || Date.now()))
-        break
-      case 'oldest':
-        filtered.sort((a, b) => new Date(a.createdAt || a.created_at || Date.now()) - new Date(b.createdAt || b.created_at || Date.now()))
-        break
-      case 'rating-high':
-        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
-        break
-      case 'rating-low':
-        filtered.sort((a, b) => (a.rating || 0) - (b.rating || 0))
-        break
-      case 'helpful':
-        filtered.sort((a, b) => (b.helpful_count || b.helpful || 0) - (a.helpful_count || a.helpful || 0))
-        break
-      default:
-        break
-    }
-
-    return filtered
-  }
-
-  const getRatingStats = () => {
-    if (reviews.length === 0) {
-      return {
-        average: 0,
-        total: 0,
-        distribution: [0, 0, 0, 0, 0]
-      }
-    }
-
-    const total = reviews.length
-    const sum = reviews.reduce((acc, review) => acc + (review.rating || 0), 0)
-    const average = total > 0 ? sum / total : 0
-
-    const distribution = [0, 0, 0, 0, 0]
-    reviews.forEach(review => {
-      const rating = review.rating || 0
-      if (rating >= 1 && rating <= 5) {
-        distribution[rating - 1]++
-      }
-    })
-
-    return { average, total, distribution }
   }
 
   const formatPrice = (price) => {
@@ -352,8 +139,6 @@ export default function ProductPage({ params }) {
   }
 
   const isInWishlist = user?.wishlist?.includes(product.id) || false
-  const ratingStats = getRatingStats()
-  const filteredReviews = getFilteredReviews()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -417,17 +202,6 @@ export default function ProductPage({ params }) {
                 <p className="text-gray-600 text-lg leading-relaxed">
                   {product.description}
                 </p>
-              </div>
-
-              {/* 평점 */}
-              <div className="flex items-center space-x-4">
-                <StarRating rating={ratingStats.average} size={20} />
-                <span className="text-lg font-medium text-gray-800">
-                  {ratingStats.average.toFixed(1)}
-                </span>
-                <span className="text-gray-500">
-                  ({ratingStats.total}개 리뷰)
-                </span>
               </div>
 
               {/* 가격 */}
@@ -499,6 +273,7 @@ export default function ProductPage({ params }) {
             </div>
           </div>
 
+          {/* 서비스 제공 기간 안내 */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-2 flex items-center">
               <span className="mr-2">📥</span>
@@ -511,7 +286,7 @@ export default function ProductPage({ params }) {
               </p>
               <p className="flex items-center">
                 <span className="font-medium">• 이용 기간:</span>
-                <span className="ml-2">구매일로부터 2주간 다운로드 이용 가능</span>
+                <span className="ml-2">구매일로부터 1년간 다운로드 이용 가능</span>
               </p>
               <p className="text-sm text-blue-600 mt-2">
                 ※ 다운로드 후에는 영구적으로 이용 가능합니다
@@ -526,8 +301,7 @@ export default function ProductPage({ params }) {
                 {[
                   { id: 'description', label: '상세정보', icon: <Book size={20} /> },
                   { id: 'features', label: '주요특징', icon: <Award size={20} /> },
-                  { id: 'contents', label: '목차', icon: <Users size={20} /> },
-                  { id: 'reviews', label: `리뷰 (${ratingStats.total})`, icon: <Star size={20} /> }
+                  { id: 'contents', label: '목차', icon: <Users size={20} /> }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -632,208 +406,10 @@ export default function ProductPage({ params }) {
                   )}
                 </div>
               )}
-
-              {/* 리뷰 탭 */}
-              {activeTab === 'reviews' && (
-                <div>
-                  {/* 리뷰 헤더 */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
-                    <h3 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">
-                      고객 리뷰 ({ratingStats.total})
-                    </h3>
-                    
-                    {isPurchased && !hasReviewed && (
-                      <button
-                        onClick={() => setIsReviewModalOpen(true)}
-                        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                      >
-                        리뷰 작성하기
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 평점 통계 */}
-                  {ratingStats.total > 0 && (
-                    <div className="bg-gray-50 rounded-xl p-6 mb-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="text-center">
-                          <div className="text-4xl font-bold text-indigo-600 mb-2">
-                            {ratingStats.average.toFixed(1)}
-                          </div>
-                          <StarRating rating={ratingStats.average} size={24} />
-                          <p className="text-gray-600 mt-2">{ratingStats.total}개의 리뷰</p>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          {[5, 4, 3, 2, 1].map(star => {
-                            const count = ratingStats.distribution[star - 1]
-                            const percentage = ratingStats.total > 0 ? (count / ratingStats.total) * 100 : 0
-                            
-                            return (
-                              <div key={star} className="flex items-center space-x-3">
-                                <span className="text-sm text-gray-600 w-3">{star}</span>
-                                <Star size={16} className="text-yellow-400 fill-current" />
-                                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                  <div
-                                    className="bg-yellow-400 h-2 rounded-full transition-all duration-300"
-                                    style={{ width: `${percentage}%` }}
-                                  />
-                                </div>
-                                <span className="text-sm text-gray-600 w-8">{count}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 리뷰 필터 */}
-                  {ratingStats.total > 0 && (
-                    <div className="flex flex-col md:flex-row gap-4 mb-6">
-                      <select
-                        value={reviewFilter}
-                        onChange={(e) => setReviewFilter(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                      >
-                        <option value="all">전체 평점</option>
-                        <option value="5">⭐⭐⭐⭐⭐ (5점)</option>
-                        <option value="4">⭐⭐⭐⭐ (4점)</option>
-                        <option value="3">⭐⭐⭐ (3점)</option>
-                        <option value="2">⭐⭐ (2점)</option>
-                        <option value="1">⭐ (1점)</option>
-                      </select>
-                      
-                      <select
-                        value={reviewSort}
-                        onChange={(e) => setReviewSort(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                      >
-                        <option value="newest">최신순</option>
-                        <option value="oldest">오래된순</option>
-                        <option value="rating-high">평점 높은순</option>
-                        <option value="rating-low">평점 낮은순</option>
-                        <option value="helpful">도움순</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {/* 리뷰 목록 */}
-                  {filteredReviews.length > 0 ? (
-                    <div className="space-y-6">
-                      {filteredReviews.map((review, index) => (
-                        <div key={review.id || index} className="border border-gray-200 rounded-lg p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-indigo-500 text-white rounded-full flex items-center justify-center font-bold">
-                                {(review.userName || review.user_name || '사용자').charAt(0)}
-                              </div>
-                              <div>
-                                <div className="flex items-center space-x-2">
-                                  <span className="font-semibold text-gray-800">
-                                    {review.userName || review.user_name || '사용자'}
-                                  </span>
-                                  {review.verified && (
-                                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                                      구매 인증
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <StarRating rating={review.rating || 0} size={16} />
-                                  <span className="text-sm text-gray-500">
-                                    {new Date(review.createdAt || review.created_at || Date.now()).toLocaleDateString('ko-KR')}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {user && (user.id === review.userId || user.id === review.user_id) && (
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={() => handleReviewEdit(review)}
-                                  className="text-gray-600 hover:text-indigo-600 text-sm"
-                                >
-                                  수정
-                                </button>
-                                <button
-                                  onClick={() => handleReviewDelete(review.id)}
-                                  className="text-gray-600 hover:text-red-600 text-sm"
-                                >
-                                  삭제
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {review.title && (
-                            <h4 className="font-semibold text-gray-800 mb-2">{review.title}</h4>
-                          )}
-                          
-                          <p className="text-gray-700 leading-relaxed mb-4">{review.content}</p>
-                          
-                          {review.photos && review.photos.length > 0 && (
-                            <div className="flex space-x-2 mb-4">
-                              {review.photos.map((photo, photoIndex) => (
-                                <img
-                                  key={photo.id || photoIndex}
-                                  src={photo.url}
-                                  alt={photo.name || `리뷰 이미지 ${photoIndex + 1}`}
-                                  className="w-20 h-20 object-cover rounded-lg border border-gray-200"
-                                />
-                              ))}
-                            </div>
-                          )}
-                          
-                          <div className="flex items-center justify-between">
-                            <button
-                              onClick={() => handleReviewHelpful(review.id)}
-                              className="flex items-center space-x-1 text-gray-600 hover:text-indigo-600 transition-colors"
-                            >
-                              <span className="text-sm">도움이 됨</span>
-                              <span className="text-sm font-medium">
-                                {review.helpful_count || review.helpful || 0}
-                              </span>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Star size={48} className="mx-auto text-gray-300 mb-4" />
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">
-                        {reviewFilter === 'all' ? '아직 리뷰가 없습니다' : '해당 평점의 리뷰가 없습니다'}
-                      </h3>
-                      <p className="text-gray-600">
-                        {isPurchased 
-                          ? '첫 번째 리뷰를 작성해보세요!' 
-                          : '상품을 구매하시면 리뷰를 작성할 수 있습니다.'
-                        }
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* 리뷰 작성 모달 */}
-      {ReviewModal && (
-        <ReviewModal
-          isOpen={isReviewModalOpen}
-          onClose={() => {
-            setIsReviewModalOpen(false)
-            setEditingReview(null)
-          }}
-          product={product}
-          user={user}
-          onSubmitReview={handleReviewSubmit}
-          editingReview={editingReview}
-        />
-      )}
     </div>
   )
 }

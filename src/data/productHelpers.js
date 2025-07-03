@@ -471,62 +471,6 @@ export async function getProductStats() {
   }
 }
 
-// 리뷰 통계
-export async function getReviewStats() {
-  try {
-    const supabase = await getSupabase()
-    if (!supabase) {
-      return {
-        totalReviews: 89,
-        monthlyReviews: 12,
-        averageRating: 4.3,
-        reviewGrowth: 25.5
-      }
-    }
-
-    const { data, error } = await supabase
-      .from('reviews')
-      .select('id, rating, created_at')
-
-    if (error) {
-      console.warn('리뷰 통계 조회 실패:', error)
-      return {
-        totalReviews: 89,
-        monthlyReviews: 12,
-        averageRating: 4.3,
-        reviewGrowth: 25.5
-      }
-    }
-
-    const totalReviews = data?.length || 0
-    const thisMonth = new Date()
-    thisMonth.setDate(1)
-    
-    const monthlyReviews = data?.filter(review => 
-      new Date(review.created_at) >= thisMonth
-    ).length || 0
-
-    const averageRating = totalReviews > 0 
-      ? data.reduce((sum, review) => sum + (review.rating || 0), 0) / totalReviews 
-      : 0
-
-    return {
-      totalReviews,
-      monthlyReviews,
-      averageRating: Math.round(averageRating * 10) / 10,
-      reviewGrowth: 25.5 // 임시값
-    }
-  } catch (error) {
-    console.error('리뷰 통계 조회 실패:', error)
-    return {
-      totalReviews: 89,
-      monthlyReviews: 12,
-      averageRating: 4.3,
-      reviewGrowth: 25.5
-    }
-  }
-}
-
 // 최근 주문 목록 - 수정된 버전 (users 테이블과 조인)
 export async function getRecentOrders(limit = 5) {
   try {

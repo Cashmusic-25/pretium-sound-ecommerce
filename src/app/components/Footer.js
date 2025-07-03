@@ -28,8 +28,9 @@ export default function Footer() {
               <h4 className="font-semibold text-blue-400 mb-2">E-Book 상품</h4>
               <ul className="text-gray-300 space-y-1">
                 <li>• 구매 후 즉시 다운로드 가능</li>
-                <li>• 구매일로부터 2주간 다운로드 이용 가능</li>
+                <li>• 구매일로부터 1년간 다운로드 이용 가능</li>
                 <li>• 다운로드 완료 후 영구 이용 가능</li>
+                <li>• 무단 배포, 복제 시 법적 책임 있음</li>
               </ul>
             </div>
             <div>
@@ -37,7 +38,8 @@ export default function Footer() {
               <ul className="text-gray-300 space-y-1">
                 <li>• 결제 완료 → 즉시 다운로드 링크 제공</li>
                 <li>• 마이페이지에서 언제든 재다운로드</li>
-                <li>• 2주 이후에는 고객센터 문의</li>
+                <li>• 1년 이후에는 고객센터 문의</li>
+                <li>• 무단 배포, 복제 시 법적 책임 있음</li>
               </ul>
             </div>
           </div>
