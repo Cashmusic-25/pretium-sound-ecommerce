@@ -63,12 +63,7 @@ export default function Hero() {
           <div className="relative flex justify-center lg:justify-end">
             {/* 플로팅 요소들만 남김 */}
             <div className="relative w-64 h-64">
-              <div className="absolute bottom-20 left-8 w-12 h-12 bg-pink-200 bg-opacity-80 rounded-full flex items-center justify-center animate-pulse">
-                <span className="text-lg">🎼</span>
-              </div>
-              <div className="absolute top-32 left-8 w-8 h-8 bg-blue-200 bg-opacity-80 rounded-full flex items-center justify-center animate-pulse">
-                <span className="text-sm">♪</span>
-              </div>
+
             </div>
           </div>
         </div>
