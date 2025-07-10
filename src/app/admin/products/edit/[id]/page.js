@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { 
   ArrowLeft, 
   Save, 
+  Upload,
   Plus,
   X,
   Package,
@@ -12,14 +13,17 @@ import {
   FileText,
   Tag,
   Image as ImageIcon,
-  Camera
+  Camera,
+  File,
+  Music,
+  Download,
+  Star
 } from 'lucide-react'
-import { useAuth } from '../../../../contexts/AuthContext'  // 상대경로로 복구
-import { products } from '../../../../../data/products'      // 상대경로로 복구
-import { supabase } from '../../../../../lib/supabase'  // 6개 - 맞음
-import Header from '../../../../components/Header'           // 상대경로로 복구
+import { useAuth } from '../../../../contexts/AuthContext'
+import { supabase } from '../../../../../lib/supabase'
+import Header from '../../../../components/Header'
 
-// 이미지 업로드 함수 (임시로 파일 내부에 정의)
+// 이미지 업로드 함수
 async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
   
@@ -27,26 +31,18 @@ async function uploadProductImage(file) {
     const fileExt = file.name.split('.').pop()
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
-    
-    console.log('📁 파일 경로:', filePath);
 
     const { data, error } = await supabase.storage
       .from('product-images')
       .upload(filePath, file)
 
-    console.log('📤 업로드 결과 - data:', data);
-    console.log('❌ 업로드 결과 - error:', error);
-
     if (error) {
-      console.error('🚨 이미지 업로드 실패:', error)
       throw error
     }
 
     const { data: { publicUrl } } = supabase.storage
       .from('product-images')
       .getPublicUrl(filePath)
-
-    console.log('✅ 생성된 공개 URL:', publicUrl);
 
     return {
       url: publicUrl,
@@ -67,10 +63,8 @@ export default function AdminProductEditPage() {
   const [isLoadingProduct, setIsLoadingProduct] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [isBasicProduct, setIsBasicProduct] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
 
-  // 클라이언트 마운트 감지
   useEffect(() => {
     setIsMounted(true)
   }, [])
@@ -81,19 +75,31 @@ export default function AdminProductEditPage() {
     detailedDescription: '',
     price: '',
     icon: '🎵',
-    image: null,        // Supabase URL
-    imagePath: null,    // 추가: Supabase 파일 경로
-    imagePreview: null, // 미리보기 URL
+    image: null,
+    imagePath: null,
+    imagePreview: null,
     category: '',
     features: [''],
     contents: [''],
+    files: [],
     specifications: {
       '페이지 수': '',
       '난이도': '',
       '출판사': 'Pretium Sound',
       '언어': '한국어',
       '포함 자료': ''
-    }
+    },
+
+    // 히어로 슬라이더 필드들 추가
+    showInHero: false,
+    heroImage: null,
+    heroImagePath: null,
+    heroImagePreview: null,
+    heroTitle: '',
+    heroSubtitle: '',
+    heroCategory: '초급용',
+    heroCategoryColor: 'bg-blue-500',
+    heroOrder: 0
   })
 
   const availableCategories = [
@@ -106,6 +112,24 @@ export default function AdminProductEditPage() {
 
   const difficultyLevels = [
     '초급', '초급 ~ 중급', '중급', '중급 ~ 고급', '고급', '전문가'
+  ]
+
+  // 카테고리 색상 옵션
+  const heroCategoryColors = [
+    { label: '파란색', value: 'bg-blue-500' },
+    { label: '초록색', value: 'bg-green-500' },
+    { label: '분홍색', value: 'bg-pink-500' },
+    { label: '보라색', value: 'bg-purple-500' },
+    { label: '노랑색', value: 'bg-yellow-500' },
+    { label: '주황색', value: 'bg-orange-500' },
+    { label: '빨간색', value: 'bg-red-500' },
+    { label: '청록색', value: 'bg-teal-500' },
+    { label: '회색', value: 'bg-gray-500' }
+  ]
+
+  // 히어로 카테고리 옵션
+  const heroCategories = [
+    '초급용', '중급용', '고급용', '전문가용', '인기', '신간', '추천'
   ]
 
   useEffect(() => {
@@ -125,36 +149,53 @@ export default function AdminProductEditPage() {
     try {
       const productId = parseInt(params.id)
       
-      // Supabase에서 상품 조회
-      const { getVisibleProductById } = await import('../../../../../data/productHelpers')
-      const foundProduct = await getVisibleProductById(productId)
+      // Supabase에서 직접 상품 조회
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { data: foundProduct, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', productId)
+        .single()
   
-      if (!foundProduct) {
+      if (error || !foundProduct) {
         setError('상품을 찾을 수 없습니다.')
         return
       }
   
       setProduct(foundProduct)
       
-      // 폼에 상품 데이터 설정
+      // 폼에 상품 데이터 설정 (히어로 필드 포함)
       setProductForm({
         title: foundProduct.title || '',
         description: foundProduct.description || '',
-        detailedDescription: foundProduct.detailedDescription || foundProduct.description || '',
-        price: foundProduct.price ? foundProduct.price.replace(/[₩,]/g, '') : '',
+        detailedDescription: foundProduct.detailed_description || foundProduct.description || '',
+        price: foundProduct.price ? foundProduct.price.toString().replace(/[₩,]/g, '') : '',
         icon: foundProduct.icon || '🎵',
-        image: foundProduct.image || null,
-        imagePreview: foundProduct.image || null,
+        image: foundProduct.image_url || null,
+        imagePreview: foundProduct.image_url || null,
         category: foundProduct.category || '',
         features: foundProduct.features?.length > 0 ? foundProduct.features : [''],
         contents: foundProduct.contents?.length > 0 ? foundProduct.contents : [''],
+        files: foundProduct.files || [],
         specifications: {
           '페이지 수': foundProduct.specifications?.['페이지 수'] || '',
           '난이도': foundProduct.specifications?.['난이도'] || '',
           '출판사': foundProduct.specifications?.['출판사'] || 'Pretium Sound',
           '언어': foundProduct.specifications?.['언어'] || '한국어',
           '포함 자료': foundProduct.specifications?.['포함 자료'] || ''
-        }
+        },
+
+        // 히어로 슬라이더 필드들
+        showInHero: foundProduct.show_in_hero || false,
+        heroImage: foundProduct.hero_image_url || null,
+        heroImagePreview: foundProduct.hero_image_url || null,
+        heroTitle: foundProduct.hero_title || '',
+        heroSubtitle: foundProduct.hero_subtitle || '',
+        heroCategory: foundProduct.hero_category || '초급용',
+        heroCategoryColor: foundProduct.hero_category_color || 'bg-blue-500',
+        heroOrder: foundProduct.hero_order || 0
       })
     } catch (err) {
       setError('상품 정보를 불러오는데 실패했습니다: ' + err.message)
@@ -187,70 +228,123 @@ export default function AdminProductEditPage() {
     if (success) setSuccess('')
   }
 
-// 이미지 업로드 핸들러 - 수정된 버전
-const handleImageUpload = async (e) => {
-  const file = e.target.files[0]
-  if (!file) return
+  // 상품 이미지 업로드 핸들러
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
 
-  // 파일 크기 체크 (5MB 제한)
-  const maxSize = 5 * 1024 * 1024
-  if (file.size > maxSize) {
-    setError('이미지 크기는 5MB 이하만 가능합니다.')
-    return
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError('이미지 크기는 5MB 이하만 가능합니다.')
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const previewUrl = URL.createObjectURL(file)
+      setProductForm(prev => ({
+        ...prev,
+        imagePreview: previewUrl
+      }))
+
+      const { url, path } = await uploadProductImage(file)
+      
+      setProductForm(prev => ({
+        ...prev,
+        image: url,
+        imagePath: path,
+        imagePreview: url
+      }))
+
+      setSuccess('이미지 업로드 완료!')
+      
+    } catch (error) {
+      setError('이미지 업로드 실패: ' + error.message)
+      setProductForm(prev => ({
+        ...prev,
+        image: null,
+        imagePreview: null,
+        imagePath: null
+      }))
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // 파일 타입 체크
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-  if (!allowedTypes.includes(file.type)) {
-    setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
-    return
+  // 히어로 이미지 업로드 핸들러
+  const handleHeroImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError('히어로 이미지 크기는 5MB 이하만 가능합니다.')
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setError('JPG, PNG, WEBP 파일만 업로드 가능합니다.')
+      return
+    }
+
+    setIsLoading(true)
+    setError('')
+
+    try {
+      const previewUrl = URL.createObjectURL(file)
+      setProductForm(prev => ({
+        ...prev,
+        heroImagePreview: previewUrl
+      }))
+
+      const result = await uploadProductImage(file)
+      
+      setProductForm(prev => ({
+        ...prev,
+        heroImage: result.url,
+        heroImagePath: result.path,
+        heroImagePreview: result.url
+      }))
+
+      setSuccess('히어로 이미지 업로드 완료!')
+      
+    } catch (error) {
+      setError('히어로 이미지 업로드 실패: ' + error.message)
+      setProductForm(prev => ({
+        ...prev,
+        heroImage: null,
+        heroImagePreview: null,
+        heroImagePath: null
+      }))
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // 업로드 진행상태 표시
-  setIsLoading(true)
-  setError('')
-
-  try {
-    // 미리보기 URL 생성 (즉시 표시용)
-    const previewUrl = URL.createObjectURL(file)
-    setProductForm(prev => ({
-      ...prev,
-      imagePreview: previewUrl
-    }))
-
-    // Supabase Storage에 업로드
-    const { url, path } = await uploadProductImage(file)
-    
-    // 실제 업로드된 URL로 업데이트
-    setProductForm(prev => ({
-      ...prev,
-      image: url, // 실제 Supabase URL
-      imagePath: path, // 삭제용 경로
-      imagePreview: url
-    }))
-
-    setSuccess('이미지 업로드 완료!')
-    
-  } catch (error) {
-    setError('이미지 업로드 실패: ' + error.message)
-    // 실패 시 미리보기 제거
-    setProductForm(prev => ({
-      ...prev,
-      image: null,
-      imagePreview: null,
-      imagePath: null
-    }))
-  } finally {
-    setIsLoading(false)
-  }
-}
-
-  // 이미지 제거 핸들러
+  // 이미지 제거 핸들러들
   const handleRemoveImage = () => {
     setProductForm(prev => ({
       ...prev,
       image: null,
       imagePreview: null
+    }))
+  }
+
+  const handleRemoveHeroImage = () => {
+    setProductForm(prev => ({
+      ...prev,
+      heroImage: null,
+      heroImagePreview: null,
+      heroImagePath: null
     }))
   }
 
@@ -329,6 +423,24 @@ const handleImageUpload = async (e) => {
       return false
     }
 
+    // 히어로 슬라이더 검증
+    if (productForm.showInHero) {
+      if (!productForm.heroImage) {
+        setError('히어로 슬라이더 이미지를 업로드해주세요.')
+        return false
+      }
+
+      if (!productForm.heroTitle.trim()) {
+        setError('히어로 슬라이더 제목을 입력해주세요.')
+        return false
+      }
+
+      if (!productForm.heroSubtitle.trim()) {
+        setError('히어로 슬라이더 부제목을 입력해주세요.')
+        return false
+      }
+    }
+
     return true
   }
 
@@ -341,34 +453,52 @@ const handleImageUpload = async (e) => {
     setError('')
   
     try {
-      // 가격 포맷팅
       const priceNum = parseInt(productForm.price.replace(/[,]/g, ''))
   
       // 업데이트된 상품 데이터 생성
       const updatedProductData = {
         title: productForm.title.trim(),
         description: productForm.description.trim(),
-        detailedDescription: productForm.detailedDescription.trim() || productForm.description.trim(),
+        detailed_description: productForm.detailedDescription.trim() || productForm.description.trim(),
         price: priceNum,
         icon: productForm.icon,
-        image: productForm.image,
-        imagePath: productForm.imagePath,
+        image_url: productForm.image,
         category: productForm.category,
         features: productForm.features.filter(f => f.trim()),
         contents: productForm.contents.filter(c => c.trim()),
+        files: productForm.files,
         specifications: Object.fromEntries(
           Object.entries(productForm.specifications).filter(([key, value]) => value.trim())
-        )
+        ),
+        
+        // 히어로 슬라이더 필드들 추가
+        show_in_hero: productForm.showInHero,
+        hero_image_url: productForm.showInHero ? productForm.heroImage : null,
+        hero_title: productForm.showInHero ? productForm.heroTitle.trim() : null,
+        hero_subtitle: productForm.showInHero ? productForm.heroSubtitle.trim() : null,
+        hero_category: productForm.showInHero ? productForm.heroCategory : null,
+        hero_category_color: productForm.showInHero ? productForm.heroCategoryColor : null,
+        hero_order: productForm.showInHero ? productForm.heroOrder : 0
       }
   
-      // Supabase에서 상품 수정
-      const { updateProduct } = await import('../../../../../data/productHelpers')
-      const updatedProduct = await updateProduct(product.id, updatedProductData)
-  
-      console.log('✅ 상품 수정 성공:', updatedProduct)
-      setSuccess('상품이 성공적으로 수정되었습니다!')
+      // Supabase에서 직접 상품 수정
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabase = getSupabase()
       
-      // 2초 후 상품 목록 페이지로 이동
+      const { data, error } = await supabase
+        .from('products')
+        .update(updatedProductData)
+        .eq('id', product.id)
+        .select()
+        .single()
+
+      if (error) {
+        throw error
+      }
+  
+      console.log('✅ 상품 수정 성공:', data)
+      setSuccess(`상품이 성공적으로 수정되었습니다!${productForm.showInHero ? ' 히어로 슬라이더 설정이 적용되었습니다.' : ''}`)
+      
       setTimeout(() => {
         router.push('/admin/products')
       }, 2000)
@@ -382,9 +512,7 @@ const handleImageUpload = async (e) => {
   }
 
   const formatPrice = (value) => {
-    // 숫자만 추출
     const numbers = value.replace(/[^\d]/g, '')
-    // 천 단위 콤마 추가
     return numbers.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
 
@@ -440,14 +568,7 @@ const handleImageUpload = async (e) => {
             
             <div>
               <h1 className="text-3xl font-bold text-gray-800">상품 수정</h1>
-              <p className="text-gray-600 mt-2">
-                {isBasicProduct ? '기본 상품 정보를 수정합니다' : '관리자가 추가한 상품을 수정합니다'}
-              </p>
-              {isBasicProduct && (
-                <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-                  기본 상품 (오버라이드 적용)
-                </div>
-              )}
+              <p className="text-gray-600 mt-2">상품 정보와 히어로 슬라이더 설정을 수정하세요</p>
             </div>
           </div>
 
@@ -464,9 +585,8 @@ const handleImageUpload = async (e) => {
             </div>
           )}
 
-          {/* 나머지 폼 내용은 상품 추가 페이지와 동일 */}
+          {/* 폼 */}
           <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg overflow-hidden">
-            {/* 여기에 상품 추가 페이지의 폼 내용을 동일하게 포함 */}
             <div className="p-8 space-y-8">
               
               {/* 기본 정보 */}
@@ -554,7 +674,201 @@ const handleImageUpload = async (e) => {
                 </div>
               </div>
 
-              {/* 아이콘 선택 */}
+              {/* 히어로 슬라이더 섹션 */}
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                  <Star className="text-indigo-600" size={24} />
+                  <span>히어로 슬라이더 설정</span>
+                </h2>
+
+                {/* 히어로 슬라이더 노출 여부 */}
+                <div className="mb-6">
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={productForm.showInHero}
+                      onChange={(e) => handleInputChange('showInHero', e.target.checked)}
+                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      홈페이지 히어로 슬라이더에 표시
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    체크하면 홈페이지 상단 슬라이더에 이 상품이 홍보됩니다
+                  </p>
+                </div>
+
+                {/* 히어로 슬라이더 옵션들 */}
+                {productForm.showInHero && (
+                  <div className="space-y-6 bg-gray-50 p-6 rounded-lg">
+                    
+                    {/* 히어로 이미지 업로드 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        히어로 슬라이더 이미지 *
+                      </label>
+                      <p className="text-xs text-gray-500 mb-3">
+                        권장 크기: 800x600px, 가로형 이미지를 업로드해주세요
+                      </p>
+                      
+                      {!productForm.heroImagePreview ? (
+                        <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                          <div className="text-center">
+                            <ImageIcon className="mx-auto text-gray-400 mb-4" size={48} />
+                            <p className="text-lg font-medium text-gray-600 mb-2">
+                              히어로 이미지 업로드
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              JPG, PNG, WEBP (최대 5MB)
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            onChange={handleHeroImageUpload}
+                            className="hidden"
+                            disabled={isLoading}
+                          />
+                        </label>
+                      ) : (
+                        <div className="relative">
+                          <img
+                            src={productForm.heroImagePreview}
+                            alt="히어로 이미지 미리보기"
+                            className="w-full h-48 object-cover rounded-lg border border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleRemoveHeroImage}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
+                            disabled={isLoading}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 히어로 제목 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        히어로 슬라이더 제목 *
+                      </label>
+                      <input
+                        type="text"
+                        value={productForm.heroTitle}
+                        onChange={(e) => handleInputChange('heroTitle', e.target.value)}
+                        placeholder="예: 안 들리는데 어떡하죠? 걱정마!"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                        maxLength={50}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">{productForm.heroTitle.length}/50자</p>
+                    </div>
+
+                    {/* 히어로 부제목 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        히어로 슬라이더 부제목 *
+                      </label>
+                      <textarea
+                        value={productForm.heroSubtitle}
+                        onChange={(e) => handleInputChange('heroSubtitle', e.target.value)}
+                        placeholder="예: 도부터 시작해서 도까지 귀에 박히도록 훈련하는 가이드북"
+                        rows={2}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none"
+                        maxLength={100}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">{productForm.heroSubtitle.length}/100자</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* 히어로 카테고리 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          히어로 카테고리 *
+                        </label>
+                        <select
+                          value={productForm.heroCategory}
+                          onChange={(e) => handleInputChange('heroCategory', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white"
+                        >
+                          {heroCategories.map(category => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 카테고리 색상 */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          카테고리 태그 색상 *
+                        </label>
+                        <select
+                          value={productForm.heroCategoryColor}
+                          onChange={(e) => handleInputChange('heroCategoryColor', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white"
+                        >
+                          {heroCategoryColors.map(color => (
+                            <option key={color.value} value={color.value}>
+                              {color.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* 슬라이더 순서 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        슬라이더 표시 순서
+                      </label>
+                      <input
+                        type="number"
+                        value={productForm.heroOrder}
+                        onChange={(e) => handleInputChange('heroOrder', parseInt(e.target.value) || 0)}
+                        placeholder="0"
+                        min="0"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        숫자가 작을수록 먼저 표시됩니다 (0이 가장 먼저)
+                      </p>
+                    </div>
+
+                    {/* 미리보기 */}
+                    {productForm.heroImagePreview && productForm.heroTitle && (
+                      <div className="border border-gray-300 rounded-lg p-4 bg-white">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">히어로 슬라이더 미리보기</h4>
+                        <div className="relative bg-white rounded-xl overflow-hidden shadow-md">
+                          <div className="relative h-32 overflow-hidden">
+                            <img 
+                              src={productForm.heroImagePreview} 
+                              alt="미리보기"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 left-2">
+                              <span className={`${productForm.heroCategoryColor} text-white px-2 py-1 rounded-full text-xs font-medium`}>
+                                {productForm.heroCategory}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-3">
+                            <h3 className="text-sm font-bold text-gray-800 mb-1 leading-tight">
+                              {productForm.heroTitle}
+                            </h3>
+                            <p className="text-xs text-gray-600 leading-relaxed">
+                              {productForm.heroSubtitle}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 상품 이미지 */}
               <div>
                 <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
                   <ImageIcon className="text-indigo-600" size={24} />
@@ -587,7 +901,7 @@ const handleImageUpload = async (e) => {
                           accept="image/jpeg,image/jpg,image/png,image/webp"
                           onChange={handleImageUpload}
                           className="hidden"
-                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
+                          disabled={isLoading}
                         />
                       </label>
                     ) : (
@@ -601,12 +915,11 @@ const handleImageUpload = async (e) => {
                           type="button"
                           onClick={handleRemoveImage}
                           className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-2 hover:bg-red-600 transition-colors"
-                          disabled={isLoading} // 추가: 업로드 중에는 비활성화
+                          disabled={isLoading}
                         >
                           <X size={16} />
                         </button>
                         
-                        {/* 추가: 업로드 진행상태 표시 */}
                         {isLoading ? (
                           <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
                             <div className="text-white text-center">
@@ -623,7 +936,7 @@ const handleImageUpload = async (e) => {
                     )}
                   </div>
 
-                  {/* 아이콘 선택 (백업용) */}
+                  {/* 아이콘 선택 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       아이콘 (이미지가 없을 때 사용)
@@ -848,7 +1161,7 @@ const handleImageUpload = async (e) => {
               >
                 {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                 <Save size={20} />
-                <span>{isLoading ? '저장 중...' : '상품 수정'}</span>
+                <span>{isLoading ? '수정 중...' : '상품 수정'}</span>
               </button>
             </div>
           </form>

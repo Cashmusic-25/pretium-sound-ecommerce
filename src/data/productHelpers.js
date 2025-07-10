@@ -1,16 +1,17 @@
-// src/data/productHelpers.js - 수정된 버전
+// src/data/productHelpers.js - DB 전용 완전 버전
 
 import { getSupabase } from '../lib/supabase'
-import { products as staticProducts } from './products'
 
 // Supabase에서 모든 활성 상품 가져오기
 export async function getAllVisibleProducts() {
   try {
     const supabase = await getSupabase()
     if (!supabase) {
-      console.warn('Supabase 연결 실패, 정적 데이터 사용')
-      return staticProducts
+      console.error('❌ Supabase 연결 실패')
+      return []
     }
+
+    console.log('🔄 getAllVisibleProducts - DB 조회 시작')
 
     const { data, error } = await supabase
       .from('products')
@@ -19,24 +20,28 @@ export async function getAllVisibleProducts() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('상품 조회 실패:', error)
-      return staticProducts
+      console.error('❌ 상품 조회 실패:', error)
+      return []
     }
 
-    // 가격을 원화 형식으로 변환
+    // 가격을 원화 형식으로 변환하고 기타 필드 정리
     const formattedProducts = data.map(product => ({
       ...product,
-      price: `₩${product.price.toLocaleString()}`,
+      price: typeof product.price === 'number' ? `₩${product.price.toLocaleString()}` : product.price,
       image: product.image_url || null,
-      detailedDescription: product.detailed_description || product.description
+      detailedDescription: product.detailed_description || product.description,
+      // files 필드가 없으면 빈 배열로 설정
+      files: product.files || []
     }))
 
-    console.log('✅ Supabase에서 상품 조회 성공:', formattedProducts.length, '개')
+    console.log('✅ getAllVisibleProducts - 조회 성공:', formattedProducts.length, '개')
+    console.log('📋 상품 ID 목록:', formattedProducts.map(p => `${p.id}: ${p.title}`))
+    
     return formattedProducts
 
   } catch (error) {
-    console.error('상품 조회 중 오류:', error)
-    return staticProducts
+    console.error('💥 getAllVisibleProducts - 에러:', error)
+    return []
   }
 }
 
@@ -44,13 +49,18 @@ export async function getAllVisibleProducts() {
 export async function getVisibleProductById(id) {
   try {
     const numericId = parseInt(id)
-    if (isNaN(numericId)) return null
+    if (isNaN(numericId)) {
+      console.warn('⚠️ 잘못된 상품 ID:', id)
+      return null
+    }
 
     const supabase = await getSupabase()
     if (!supabase) {
-      console.warn('Supabase 연결 실패, 정적 데이터 사용')
-      return staticProducts.find(p => p.id === numericId) || null
+      console.error('❌ Supabase 연결 실패')
+      return null
     }
+
+    console.log('🔄 getVisibleProductById - ID로 조회:', numericId)
 
     const { data, error } = await supabase
       .from('products')
@@ -60,25 +70,31 @@ export async function getVisibleProductById(id) {
       .single()
 
     if (error) {
-      console.error('상품 조회 실패:', error)
-      return staticProducts.find(p => p.id === numericId) || null
+      console.error('❌ 상품 조회 실패:', error)
+      return null
     }
 
-    // 가격을 원화 형식으로 변환
+    if (!data) {
+      console.warn('⚠️ 상품을 찾을 수 없음:', numericId)
+      return null
+    }
+
+    // 가격을 원화 형식으로 변환하고 기타 필드 정리
     const formattedProduct = {
       ...data,
-      price: `₩${data.price.toLocaleString()}`,
+      price: typeof data.price === 'number' ? `₩${data.price.toLocaleString()}` : data.price,
       image: data.image_url || null,
-      detailedDescription: data.detailed_description || data.description
+      detailedDescription: data.detailed_description || data.description,
+      // files 필드가 없으면 빈 배열로 설정
+      files: data.files || []
     }
 
-    console.log('✅ Supabase에서 상품 조회 성공:', formattedProduct.title)
+    console.log('✅ getVisibleProductById - 조회 성공:', formattedProduct.title)
     return formattedProduct
 
   } catch (error) {
-    console.error('상품 조회 중 오류:', error)
-    const numericId = parseInt(id)
-    return staticProducts.find(p => p.id === numericId) || null
+    console.error('💥 getVisibleProductById - 에러:', error)
+    return null
   }
 }
 
@@ -108,6 +124,7 @@ export async function createProduct(productData) {
       features: productData.features || [],
       contents: productData.contents || [],
       specifications: productData.specifications || {},
+      files: productData.files || [],
       is_active: true
     }
 
@@ -162,6 +179,7 @@ export async function updateProduct(productId, productData) {
       features: productData.features || [],
       contents: productData.contents || [],
       specifications: productData.specifications || {},
+      files: productData.files || [],
       updated_at: new Date().toISOString()
     }
 
@@ -265,7 +283,7 @@ export async function uploadProductImage(file) {
   }
 }
 
-// 매출 통계 - 수정된 버전
+// 매출 통계
 export async function getSalesStats() {
   try {
     const supabase = await getSupabase()
@@ -281,47 +299,13 @@ export async function getSalesStats() {
       }
     }
 
-    // 현재 사용자가 관리자인지 확인
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      console.warn('인증되지 않은 사용자')
-      return {
-        totalSales: 0,
-        monthlySales: 0,
-        totalOrders: 0,
-        monthlyOrders: 0,
-        salesGrowth: 0,
-        orderGrowth: 0
-      }
-    }
-
-    // 관리자 권한 확인
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile || profile.role !== 'admin') {
-      console.warn('관리자 권한이 없습니다')
-      return {
-        totalSales: 0,
-        monthlySales: 0,
-        totalOrders: 0,
-        monthlyOrders: 0,
-        salesGrowth: 0,
-        orderGrowth: 0
-      }
-    }
-
-    // 주문 데이터 조회 (간단하게)
+    // 주문 데이터 조회
     const { data: orders, error } = await supabase
       .from('orders')
       .select('total_amount, created_at')
 
     if (error) {
       console.warn('매출 통계 조회 실패:', error)
-      // 더미 데이터 반환
       return {
         totalSales: 15420000,
         monthlySales: 2340000,
@@ -355,7 +339,6 @@ export async function getSalesStats() {
     }
   } catch (error) {
     console.error('매출 통계 조회 실패:', error)
-    // 에러 시 더미 데이터 반환
     return {
       totalSales: 15420000,
       monthlySales: 2340000,
@@ -423,11 +406,11 @@ export async function getProductStats() {
     const supabase = await getSupabase()
     if (!supabase) {
       return {
-        totalProducts: 6,
-        activeProducts: 6,
+        totalProducts: 9,
+        activeProducts: 9,
         inactiveProducts: 0,
-        averagePrice: 45000,
-        totalValue: 270000
+        averagePrice: 35000,
+        totalValue: 315000
       }
     }
 
@@ -438,11 +421,11 @@ export async function getProductStats() {
     if (error) {
       console.warn('상품 통계 조회 실패:', error)
       return {
-        totalProducts: 6,
-        activeProducts: 6,
+        totalProducts: 9,
+        activeProducts: 9,
         inactiveProducts: 0,
-        averagePrice: 45000,
-        totalValue: 270000
+        averagePrice: 35000,
+        totalValue: 315000
       }
     }
 
@@ -462,16 +445,16 @@ export async function getProductStats() {
   } catch (error) {
     console.error('상품 통계 조회 실패:', error)
     return {
-      totalProducts: 6,
-      activeProducts: 6,
+      totalProducts: 9,
+      activeProducts: 9,
       inactiveProducts: 0,
-      averagePrice: 45000,
-      totalValue: 270000
+      averagePrice: 35000,
+      totalValue: 315000
     }
   }
 }
 
-// 최근 주문 목록 - 수정된 버전 (users 테이블과 조인)
+// 최근 주문 목록
 export async function getRecentOrders(limit = 5) {
   try {
     const supabase = await getSupabase()
@@ -479,7 +462,7 @@ export async function getRecentOrders(limit = 5) {
       return []
     }
 
-    // users 테이블과 조인하도록 수정
+    // users 테이블과 조인
     const { data, error } = await supabase
       .from('orders')
       .select(`
@@ -525,4 +508,16 @@ export async function getPopularProducts(limit = 5) {
     console.error('인기 상품 조회 실패:', error)
     return []
   }
+}
+
+// 상품의 파일 정보 가져오기 (레거시 호환성)
+export function getProductFiles(product) {
+  if (!product) return []
+  return product.files || []
+}
+
+// 파일 ID로 특정 파일 찾기 (레거시 호환성)
+export function getFileById(product, fileId) {
+  if (!product || !product.files) return null
+  return product.files.find(file => file.id === fileId) || null
 }

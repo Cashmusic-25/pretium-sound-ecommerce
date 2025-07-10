@@ -18,7 +18,7 @@ export function FilterProvider({ children }) {
     setIsClient(true)
   }, [])
 
-  // Supabase에서 상품 데이터 로드
+  // Supabase에서 상품 데이터 로드 (모든 활성 상품)
   useEffect(() => {
     const loadProducts = async () => {
       if (!isClient) return
@@ -26,15 +26,18 @@ export function FilterProvider({ children }) {
       try {
         setIsLoading(true)
         
-        // productHelpers에서 getAllVisibleProducts 사용
+        console.log('🔄 ProductGrid - 상품 데이터 로드 시작')
+        
+        // 동적 import를 사용하여 productHelpers 로드
         const { getAllVisibleProducts } = await import('../../data/productHelpers')
         const supabaseProducts = await getAllVisibleProducts()
         
-        console.log('🏠 홈페이지 - 로드된 상품:', supabaseProducts.length, '개')
+        console.log('✅ ProductGrid - 로드된 상품:', supabaseProducts.length, '개')
+        console.log('📋 ProductGrid - 상품 목록:', supabaseProducts.map(p => `${p.id}: ${p.title}`))
         
         setProducts(supabaseProducts)
       } catch (error) {
-        console.error('상품 로드 실패:', error)
+        console.error('❌ ProductGrid - 상품 로드 실패:', error)
         setProducts([])
       } finally {
         setIsLoading(false)
@@ -47,6 +50,7 @@ export function FilterProvider({ children }) {
   // 카테고리 목록 추출
   const categories = useMemo(() => {
     const uniqueCategories = [...new Set(products.map(product => product.category))]
+    console.log('📂 사용 가능한 카테고리:', uniqueCategories)
     return ['all', ...uniqueCategories]
   }, [products])
 
@@ -117,6 +121,8 @@ export function FilterProvider({ children }) {
         break
     }
 
+    console.log('🔍 필터링 결과:', filtered.length, '개 상품')
+
     return filtered
   }, [products, searchTerm, selectedCategory, priceRange, sortBy, isLoading, isClient])
 
@@ -143,7 +149,8 @@ export function FilterProvider({ children }) {
     totalProducts: products.length,
     filteredCount: filteredProducts.length,
     isClient,
-    isLoading
+    isLoading,
+    products  // 전체 상품 배열 추가
   }
 
   return (

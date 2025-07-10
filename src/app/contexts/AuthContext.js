@@ -1,4 +1,4 @@
-// src/contexts/AuthContext.js - 보안 강화 버전
+// src/contexts/AuthContext.js - 위시리스트 기능 추가 버전
 'use client'
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { getSupabase } from '../../lib/supabase'
@@ -12,6 +12,84 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null)
   const [retryCount, setRetryCount] = useState(0)
   const [supabaseReady, setSupabaseReady] = useState(false)
+  const [wishlist, setWishlist] = useState([]) // 위시리스트 상태 추가
+
+  // 위시리스트 로컬 스토리지 키 생성
+  const getWishlistKey = (userId) => `wishlist_${userId}`
+
+  // 위시리스트 로드
+  const loadWishlist = useCallback((userId) => {
+    if (!userId) return []
+    
+    try {
+      const savedWishlist = localStorage.getItem(getWishlistKey(userId))
+      return savedWishlist ? JSON.parse(savedWishlist) : []
+    } catch (error) {
+      console.warn('위시리스트 로드 실패:', error)
+      return []
+    }
+  }, [])
+
+  // 위시리스트 저장
+  const saveWishlist = useCallback((userId, wishlistData) => {
+    if (!userId) return
+    
+    try {
+      localStorage.setItem(getWishlistKey(userId), JSON.stringify(wishlistData))
+    } catch (error) {
+      console.warn('위시리스트 저장 실패:', error)
+    }
+  }, [])
+
+  // 위시리스트 토글 함수
+  const toggleWishlist = useCallback((productId) => {
+    if (!user) {
+      throw new Error('로그인이 필요합니다.')
+    }
+
+    setWishlist(prevWishlist => {
+      const productIdStr = String(productId)
+      const isInWishlist = prevWishlist.includes(productIdStr)
+      
+      let newWishlist
+      if (isInWishlist) {
+        // 위시리스트에서 제거
+        newWishlist = prevWishlist.filter(id => id !== productIdStr)
+        console.log('💔 위시리스트에서 제거:', productId)
+      } else {
+        // 위시리스트에 추가
+        newWishlist = [...prevWishlist, productIdStr]
+        console.log('💖 위시리스트에 추가:', productId)
+      }
+      
+      // 로컬 스토리지에 저장
+      saveWishlist(user.id, newWishlist)
+      
+      return newWishlist
+    })
+    
+    // 토글 후 상태 반환 (UI에서 즉시 사용할 수 있도록)
+    return !wishlist.includes(String(productId))
+  }, [user, saveWishlist, wishlist])
+
+  // 위시리스트에 있는지 확인
+  const isInWishlist = useCallback((productId) => {
+    return wishlist.includes(String(productId))
+  }, [wishlist])
+
+  // 위시리스트 전체 가져오기
+  const getWishlist = useCallback(() => {
+    return wishlist
+  }, [wishlist])
+
+  // 위시리스트 전체 삭제
+  const clearWishlist = useCallback(() => {
+    if (!user) return
+    
+    setWishlist([])
+    saveWishlist(user.id, [])
+    console.log('🗑️ 위시리스트 전체 삭제')
+  }, [user, saveWishlist])
 
 // 인증된 API 요청을 위한 헬퍼 함수 (수정된 버전)
 const makeAuthenticatedRequest = async (url, options = {}) => {
@@ -249,6 +327,9 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       if (session?.user) {
         console.log('✅ 기존 세션 복원:', session.user.email)
         setUser(session.user)
+        // 위시리스트 로드
+        const userWishlist = loadWishlist(session.user.id)
+        setWishlist(userWishlist)
       } else {
         console.log('❌ 기존 세션 없음')
       }
@@ -258,6 +339,16 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         (event, session) => {
           console.log('🔄 인증 상태 변화:', event, session?.user?.email)
           setUser(session?.user || null)
+          
+          if (session?.user) {
+            // 로그인 시 위시리스트 로드
+            const userWishlist = loadWishlist(session.user.id)
+            setWishlist(userWishlist)
+          } else {
+            // 로그아웃 시 위시리스트 초기화
+            setWishlist([])
+          }
+          
           setLoading(false)
         }
       )
@@ -284,7 +375,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         console.error('❌ 최대 재시도 횟수 초과')
       }
     }
-  }, [retryCount])
+  }, [retryCount, loadWishlist])
 
   useEffect(() => {
     let cleanup = null
@@ -339,6 +430,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       }
   
       console.log('✅ 로그인 성공:', data.user.email)
+      // 위시리스트는 onAuthStateChange에서 자동으로 로드됨
       return { user: data.user, error: null }
   
     } catch (error) {
@@ -413,9 +505,11 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       
       console.log('✅ 로그아웃 성공')
       setUser(null)
+      setWishlist([]) // 위시리스트 초기화
     } catch (error) {
       console.error('💥 로그아웃 실패:', error)
       setUser(null) // 강제 로그아웃
+      setWishlist([]) // 위시리스트 초기화
       throw error
     }
   }
@@ -538,7 +632,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     isAuthenticated: !!user,
     isAdmin,
     supabaseReady,
-    makeAuthenticatedRequest, // 새로 추가
+    makeAuthenticatedRequest,
     getAllUsers,
     getAllOrders,
     getAllReviews,
@@ -549,7 +643,13 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     hasReviewedProduct,
     addReview,
     updateReview,
-    deleteReview
+    deleteReview,
+    // 위시리스트 관련 함수들 추가
+    wishlist,
+    toggleWishlist,
+    isInWishlist,
+    getWishlist,
+    clearWishlist
   }
 
   return (

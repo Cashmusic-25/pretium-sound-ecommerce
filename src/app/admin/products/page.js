@@ -12,7 +12,8 @@ import {
   Eye,
   ArrowLeft,
   Package,
-  DollarSign
+  DollarSign,
+  Star
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import Header from '../../components/Header'
@@ -27,6 +28,7 @@ export default function AdminProductsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [productToDelete, setProductToDelete] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) {
@@ -34,30 +36,38 @@ export default function AdminProductsPage() {
       return
     }
   
-    // Supabase에서 상품 목록 로드
-    const loadProducts = async () => {
-      try {
-        setIsLoading(true)
-        
-        // productHelpers에서 getAllVisibleProducts 사용
-        const { getAllVisibleProducts } = await import('@/data/productHelpers')
-        const products = await getAllVisibleProducts()
-        
-        console.log('📦 관리자 페이지 - 로드된 상품:', products.length, '개')
-        
-        setProductList(products)
-        setFilteredProducts(products)
-      } catch (error) {
-        console.error('상품 로드 실패:', error)
-        setProductList([])
-        setFilteredProducts([])
-      } finally {
-        setIsLoading(false)
-      }
-    }
-  
     loadProducts()
   }, [isAdmin, router])
+
+  // Supabase에서 상품 목록 로드
+  const loadProducts = async () => {
+    try {
+      setIsLoading(true)
+      
+      const { getSupabase } = await import('../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        throw error
+      }
+      
+      console.log('📦 관리자 페이지 - 로드된 상품:', products?.length || 0, '개')
+      
+      setProductList(products || [])
+      setFilteredProducts(products || [])
+    } catch (error) {
+      console.error('상품 로드 실패:', error)
+      setProductList([])
+      setFilteredProducts([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   // 검색 및 필터링
   useEffect(() => {
@@ -86,45 +96,46 @@ export default function AdminProductsPage() {
     setShowDeleteModal(true)
   }
 
-  const confirmDelete = () => {
-    if (productToDelete) {
-      if (productToDelete.id <= 6) {
-        // 기본 상품 삭제 - 숨김 처리
-        const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
-        if (!hiddenProducts.includes(productToDelete.id)) {
-          hiddenProducts.push(productToDelete.id)
-          localStorage.setItem('hiddenProducts', JSON.stringify(hiddenProducts))
-        }
-        
-        // 오버라이드도 제거
-        const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-        delete productOverrides[productToDelete.id]
-        localStorage.setItem('productOverrides', JSON.stringify(productOverrides))
-      } else {
-        // 추가된 상품 삭제
-        const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-        const updatedProducts = savedProducts.filter(p => p.id !== productToDelete.id)
-        localStorage.setItem('adminProducts', JSON.stringify(updatedProducts))
+  // Supabase에서 상품 삭제
+  const confirmDelete = async () => {
+    if (!productToDelete) return
+    
+    try {
+      setIsDeleting(true)
+      
+      const { getSupabase } = await import('../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productToDelete.id)
+      
+      if (error) {
+        throw error
       }
-
-      // 상품 목록 새로고침
-      const savedProducts = JSON.parse(localStorage.getItem('adminProducts') || '[]')
-      const productOverrides = JSON.parse(localStorage.getItem('productOverrides') || '{}')
-      const hiddenProducts = JSON.parse(localStorage.getItem('hiddenProducts') || '[]')
       
-      // 기본 상품에 오버라이드 적용하고 숨겨진 상품 제외
-      const updatedBaseProducts = products
-        .filter(product => !hiddenProducts.includes(product.id))
-        .map(product => ({
-          ...product,
-          ...productOverrides[product.id]
-        }))
+      console.log('✅ 상품 삭제 완료:', productToDelete.title)
       
-      const allProducts = [...updatedBaseProducts, ...savedProducts]
-      setProductList(allProducts)
+      // 로컬 상태에서도 제거
+      const updatedProducts = productList.filter(p => p.id !== productToDelete.id)
+      setProductList(updatedProducts)
+      setFilteredProducts(updatedProducts.filter(product => {
+        const matchesSearch = !searchTerm || 
+          product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          product.category.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
+        return matchesSearch && matchesCategory
+      }))
       
       setShowDeleteModal(false)
       setProductToDelete(null)
+      
+    } catch (error) {
+      console.error('상품 삭제 실패:', error)
+      alert('상품 삭제 중 오류가 발생했습니다: ' + error.message)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -258,6 +269,9 @@ export default function AdminProductsPage() {
                         가격
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        히어로
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         상태
                       </th>
                       <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -270,9 +284,17 @@ export default function AdminProductsPage() {
                       <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-4">
-                            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg w-12 h-12 flex items-center justify-center text-white text-2xl">
-                              {product.icon}
-                            </div>
+                            {product.image_url ? (
+                              <img 
+                                src={product.image_url} 
+                                alt={product.title}
+                                className="w-12 h-12 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg w-12 h-12 flex items-center justify-center text-white text-2xl">
+                                {product.icon}
+                              </div>
+                            )}
                             <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {product.title}
@@ -292,6 +314,18 @@ export default function AdminProductsPage() {
                           <div className="text-sm font-medium text-gray-900">
                             {formatPrice(product.price)}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {product.show_in_hero ? (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                              <Star size={12} className="mr-1" />
+                              표시중
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                              미표시
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
@@ -314,7 +348,6 @@ export default function AdminProductsPage() {
                             >
                               <Edit size={16} />
                             </button>
-                            {/* 모든 상품에 삭제 버튼 표시 */}
                             <button
                               onClick={() => handleDeleteProduct(product)}
                               className="text-gray-600 hover:text-red-600 transition-colors p-2"
@@ -365,11 +398,7 @@ export default function AdminProductsPage() {
             <p className="text-gray-600 mb-6">
               &ldquo;<strong>{productToDelete?.title}</strong>&rdquo; 상품을 정말 삭제하시겠습니까?
               <br />
-              {productToDelete?.id <= 6 ? (
-                <span className="text-blue-600 text-sm">기본 상품은 숨김 처리됩니다.</span>
-              ) : (
-                <span className="text-red-600 text-sm">이 작업은 되돌릴 수 없습니다.</span>
-              )}
+              <span className="text-red-600 text-sm">이 작업은 되돌릴 수 없습니다.</span>
             </p>
             
             <div className="flex space-x-3">
@@ -378,15 +407,18 @@ export default function AdminProductsPage() {
                   setShowDeleteModal(false)
                   setProductToDelete(null)
                 }}
-                className="flex-1 border-2 border-gray-300 text-gray-600 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                disabled={isDeleting}
+                className="flex-1 border-2 border-gray-300 text-gray-600 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 취소
               </button>
               <button
                 onClick={confirmDelete}
-                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition-colors"
+                disabled={isDeleting}
+                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
               >
-                삭제
+                {isDeleting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
+                <span>{isDeleting ? '삭제 중...' : '삭제'}</span>
               </button>
             </div>
           </div>

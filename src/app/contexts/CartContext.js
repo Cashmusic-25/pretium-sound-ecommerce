@@ -189,3 +189,28 @@ export function useCart() {
   }
   return context
 }
+
+
+// 가격 파싱 헬퍼 함수
+const parsePrice = (price) => {
+  if (typeof price === 'number') {
+    return price
+  }
+  
+  if (typeof price === 'string') {
+    // '₩45,000' 또는 '45,000원' 형태를 숫자로 변환
+    const cleanPrice = price.replace(/[₩,원]/g, '')
+    const numericPrice = parseInt(cleanPrice)
+    return isNaN(numericPrice) ? 0 : numericPrice
+  }
+  
+  return 0
+}
+
+// 총 가격 계산 (안전한 가격 파싱)
+const getTotalPrice = () => {
+  return state.items.reduce((total, item) => {
+    const price = parsePrice(item.price)
+    return total + (price * item.quantity)
+  }, 0)
+}

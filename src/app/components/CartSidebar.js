@@ -15,6 +15,22 @@ export default function CartSidebar({ isOpen, onClose }) {
     }).format(price)
   }
 
+  // 가격 문자열을 숫자로 변환하는 함수
+  const parsePrice = (price) => {
+    if (typeof price === 'number') {
+      return price
+    }
+    
+    if (typeof price === 'string') {
+      // '₩45,000' 또는 '45,000원' 형태를 숫자로 변환
+      const cleanPrice = price.replace(/[₩,원]/g, '')
+      const numericPrice = parseInt(cleanPrice)
+      return isNaN(numericPrice) ? 0 : numericPrice
+    }
+    
+    return 0
+  }
+
   const handleQuantityChange = (productId, newQuantity) => {
     if (newQuantity <= 0) {
       removeFromCart(productId)
@@ -65,68 +81,90 @@ export default function CartSidebar({ isOpen, onClose }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {items.map((item) => (
-                <div key={item.id} className="bg-gray-50 rounded-xl p-4">
-                  <div className="flex items-start space-x-4">
-                    {/* 상품 아이콘 */}
-                    <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg w-16 h-16 flex items-center justify-center text-white text-2xl flex-shrink-0">
-                      {item.icon}
-                    </div>
-                    
-                    {/* 상품 정보 */}
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-800 truncate">
-                        {item.title}
-                      </h3>
-                      <p className="text-sm text-gray-500 mb-2">
-                        {item.category}
-                      </p>
-                      <p className="text-lg font-bold text-indigo-600">
-                        {item.price}
-                      </p>
-                    </div>
-                    
-                    {/* 삭제 버튼 */}
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  
-                  {/* 수량 조절 */}
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <Minus size={16} className="text-gray-600" />
-                      </button>
+              {items.map((item) => {
+                const itemPrice = parsePrice(item.price)
+                
+                return (
+                  <div key={item.id} className="bg-gray-50 rounded-xl p-4">
+                    <div className="flex items-start space-x-4">
+                      {/* 상품 이미지 또는 아이콘 */}
+                      {item.image ? (
+                        <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                          <img 
+                            src={item.image} 
+                            alt={item.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // 이미지 로드 실패 시 아이콘으로 대체
+                              e.target.style.display = 'none'
+                              e.target.nextSibling.style.display = 'flex'
+                            }}
+                          />
+                          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg w-16 h-16 flex items-center justify-center text-white text-2xl" style={{display: 'none'}}>
+                            {item.icon}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg w-16 h-16 flex items-center justify-center text-white text-2xl flex-shrink-0">
+                          {item.icon}
+                        </div>
+                      )}
                       
-                      <span className="w-12 text-center font-semibold text-gray-800">
-                        {item.quantity}
-                      </span>
+                      {/* 상품 정보 */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-800 truncate">
+                          {item.title}
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-2">
+                          {item.category}
+                        </p>
+                        <p className="text-lg font-bold text-indigo-600">
+                          {formatPrice(itemPrice)}
+                        </p>
+                      </div>
                       
+                      {/* 삭제 버튼 */}
                       <button
-                        onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        onClick={() => removeFromCart(item.id)}
+                        className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                       >
-                        <Plus size={16} className="text-gray-600" />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                     
-                    {/* 개별 총 가격 */}
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">소계</p>
-                      <p className="font-bold text-gray-800">
-                        {formatPrice(parseInt(item.price.replace(/[₩,]/g, '')) * item.quantity)}
-                      </p>
+                    {/* 수량 조절 */}
+                    <div className="flex items-center justify-between mt-4">
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <Minus size={16} className="text-gray-600" />
+                        </button>
+                        
+                        <span className="w-12 text-center font-semibold text-gray-800">
+                          {item.quantity}
+                        </span>
+                        
+                        <button
+                          onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <Plus size={16} className="text-gray-600" />
+                        </button>
+                      </div>
+                      
+                      {/* 개별 총 가격 */}
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500">소계</p>
+                        <p className="font-bold text-gray-800">
+                          {formatPrice(itemPrice * item.quantity)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               
               {/* 장바구니 전체 삭제 */}
               {items.length > 0 && (

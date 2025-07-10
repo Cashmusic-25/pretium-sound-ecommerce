@@ -88,7 +88,7 @@ export default function Header() {
               </div>
               {/* 브랜드 텍스트 */}
               <div className="text-2xl font-bold gradient-text group-hover:text-blue-400 transition-colors duration-200">
-                Pretium Sound
+                PRETIUM SOUND
               </div>
             </div>
 
