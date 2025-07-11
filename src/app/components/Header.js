@@ -1,8 +1,9 @@
+// src/components/Header.js - 방관리 메뉴 일반화 버전
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Menu, X, ShoppingCart, User, LogOut, Heart, Package, Settings, BarChart3 } from 'lucide-react'
+import { Menu, X, ShoppingCart, User, LogOut, Heart, Package, Settings, BarChart3, Calendar, MapPin } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
 import { useAuth } from '../contexts/AuthContext'
 import CartSidebar from './CartSidebar'
@@ -20,9 +21,12 @@ export default function Header() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth()
   const router = useRouter()
 
+  // 업데이트된 네비게이션 아이템 (방관리 메뉴 추가)
   const navItems = [
     { name: '홈', href: '#home' },
     { name: '교재', href: '#products' },
+    { name: '방 예약', href: '/rooms' },      // 새로 추가
+    { name: '일정', href: '/schedule' },      // 새로 추가
     { name: '소개', href: '#about' },
     { name: '문의', href: '#contact' }
   ]
@@ -53,29 +57,41 @@ export default function Header() {
     setIsMenuOpen(false)
   }
 
+  // 네비게이션 클릭 핸들러 (방관리 메뉴용)
+  const handleNavClick = (href) => {
+    if (href.startsWith('#')) {
+      // 앵커 링크인 경우 기존 동작 유지
+      const element = document.querySelector(href)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' })
+      }
+    } else {
+      // 페이지 라우팅
+      router.push(href)
+    }
+    setIsMenuOpen(false)
+  }
+
   return (
     <>
       <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627', borderBottomColor: '#404041'}}>
         <nav className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            {/* 로고 섹션 - 이미지 파일 + 텍스트 */}
+            {/* 로고 섹션 - 기존과 동일 */}
             <div 
               className="flex items-center space-x-3 cursor-pointer group"
               onClick={handleHomeClick}
             >
-              {/* 로고 이미지 */}
               <div className="w-10 h-10 rounded-lg overflow-hidden group-hover:scale-105 transition-transform duration-200">
                 <img 
                   src="/images/logo.png" 
                   alt="Pretium Sound Logo" 
                   className="w-full h-full object-contain"
                   onError={(e) => {
-                    // 이미지 로드 실패시 기본 음표 아이콘으로 대체
                     e.target.style.display = 'none';
                     e.target.nextElementSibling.style.display = 'flex';
                   }}
                 />
-                {/* 이미지 로드 실패시 보여줄 기본 아이콘 */}
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center" style={{display: 'none'}}>
                   <svg 
                     className="w-6 h-6 text-white" 
@@ -86,22 +102,23 @@ export default function Header() {
                   </svg>
                 </div>
               </div>
-              {/* 브랜드 텍스트 */}
               <div className="text-2xl font-bold gradient-text group-hover:text-blue-400 transition-colors duration-200">
                 PRETIUM SOUND
               </div>
             </div>
 
-            {/* 데스크톱 네비게이션 */}
+            {/* 데스크톱 네비게이션 - 일반화된 메뉴 */}
             <div className="hidden md:flex items-center space-x-8">
               {navItems.map((item) => (
-                <a
+                <button
                   key={item.name}
-                  href={item.href}
-                  className="text-gray-300 hover:text-blue-400 font-medium transition-colors duration-200"
+                  onClick={() => handleNavClick(item.href)}
+                  className="text-gray-300 hover:text-blue-400 font-medium transition-colors duration-200 flex items-center space-x-1"
                 >
-                  {item.name}
-                </a>
+                  {item.name === '방 예약' && <MapPin size={18} />}
+                  {item.name === '일정' && <Calendar size={18} />}
+                  <span>{item.name}</span>
+                </button>
               ))}
               
               {/* 관리자 전용 메뉴 */}
@@ -115,7 +132,7 @@ export default function Header() {
                 </button>
               )}
               
-              {/* 장바구니 아이콘 */}
+              {/* 장바구니 아이콘 - 기존과 동일 */}
               <button 
                 onClick={handleCartClick}
                 className="relative p-2 text-gray-300 hover:text-blue-400 transition-colors duration-200"
@@ -128,7 +145,7 @@ export default function Header() {
                 )}
               </button>
 
-              {/* 사용자 메뉴 */}
+              {/* 사용자 메뉴 - 방관리 메뉴 일반화 */}
               {isAuthenticated ? (
                 <div className="relative">
                   <button
@@ -145,7 +162,7 @@ export default function Header() {
                     </div>
                   </button>
 
-                  {/* 사용자 드롭다운 메뉴 */}
+                  {/* 사용자 드롭다운 메뉴 - 방관리 메뉴 일반화 */}
                   {isUserMenuOpen && (
                     <div className="absolute right-0 mt-2 w-56 rounded-lg shadow-lg border border-gray-700 py-2 z-50" style={{backgroundColor: '#2a2a2b'}}>
                       <div className="px-4 py-2 border-b border-gray-700">
@@ -169,6 +186,29 @@ export default function Header() {
                         <User size={16} />
                         <span>내 프로필</span>
                       </button>
+
+                      {/* 방관리 메뉴 일반화 */}
+                      <button 
+                        onClick={() => {
+                          router.push('/rooms')
+                          setIsUserMenuOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
+                      >
+                        <MapPin size={16} />
+                        <span>방 예약</span>
+                      </button>
+
+                      <button 
+                        onClick={() => {
+                          router.push('/schedule')
+                          setIsUserMenuOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
+                      >
+                        <Calendar size={16} />
+                        <span>일정 관리</span>
+                      </button>
                       
                       <button 
                         onClick={() => {
@@ -179,11 +219,6 @@ export default function Header() {
                       >
                         <Heart size={16} />
                         <span>위시리스트</span>
-                        {user?.wishlist?.length > 0 && (
-                          <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
-                            {user.wishlist.length}
-                          </span>
-                        )}
                       </button>
                       
                       <button 
@@ -195,11 +230,6 @@ export default function Header() {
                       >
                         <Package size={16} />
                         <span>주문 내역</span>
-                        {user?.orders?.length > 0 && (
-                          <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5 ml-auto">
-                            {user.orders.length}
-                          </span>
-                        )}
                       </button>
                       
                       {/* 관리자 전용 메뉴 */}
@@ -241,6 +271,29 @@ export default function Header() {
                           >
                             <ShoppingCart size={16} />
                             <span>주문 관리</span>
+                          </button>
+
+                          {/* 방관리 관련 관리자 메뉴 */}
+                          <button 
+                            onClick={() => {
+                              router.push('/admin/rooms')
+                              setIsUserMenuOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-blue-300 hover:bg-blue-900/30 flex items-center space-x-2"
+                          >
+                            <MapPin size={16} />
+                            <span>방 관리</span>
+                          </button>
+
+                          <button 
+                            onClick={() => {
+                              router.push('/admin/classes')
+                              setIsUserMenuOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-blue-300 hover:bg-blue-900/30 flex items-center space-x-2"
+                          >
+                            <Calendar size={16} />
+                            <span>수업 관리</span>
                           </button>
                         </>
                       )}
@@ -307,33 +360,47 @@ export default function Header() {
             </div>
           </div>
 
-          {/* 모바일 메뉴 */}
+          {/* 모바일 메뉴 - 방관리 메뉴 일반화 */}
           {isMenuOpen && (
             <div className="md:hidden mt-4 pb-4 border-t border-gray-700">
               <div className="flex flex-col space-y-2 pt-4">
                 {navItems.map((item) => (
-                  <a
+                  <button
                     key={item.name}
-                    href={item.href}
-                    className="text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors duration-200"
-                    onClick={() => setIsMenuOpen(false)}
+                    onClick={() => handleNavClick(item.href)}
+                    className="text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors duration-200 flex items-center space-x-2"
                   >
-                    {item.name}
-                  </a>
+                    {item.name === '방 예약' && <MapPin size={18} />}
+                    {item.name === '일정' && <Calendar size={18} />}
+                    <span>{item.name}</span>
+                  </button>
                 ))}
                 
                 {/* 관리자 전용 모바일 메뉴 */}
                 {isAdmin && (
-                  <button
-                    onClick={() => {
-                      router.push('/admin')
-                      setIsMenuOpen(false)
-                    }}
-                    className="text-left text-blue-400 hover:text-blue-300 font-medium py-2 transition-colors flex items-center space-x-2"
-                  >
-                    <BarChart3 size={18} />
-                    <span>관리자 대시보드</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        router.push('/admin')
+                        setIsMenuOpen(false)
+                      }}
+                      className="text-left text-blue-400 hover:text-blue-300 font-medium py-2 transition-colors flex items-center space-x-2"
+                    >
+                      <BarChart3 size={18} />
+                      <span>관리자 대시보드</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        router.push('/admin/rooms')
+                        setIsMenuOpen(false)
+                      }}
+                      className="text-left text-blue-400 hover:text-blue-300 font-medium py-2 transition-colors flex items-center space-x-2"
+                    >
+                      <MapPin size={18} />
+                      <span>방 관리</span>
+                    </button>
+                  </>
                 )}
                 
                 {/* 모바일 인증 버튼 */}
@@ -376,33 +443,47 @@ export default function Header() {
                     >
                       내 프로필
                     </button>
+
+                    {/* 모바일 방관리 메뉴 일반화 */}
+                    <button 
+                      onClick={() => {
+                        router.push('/rooms')
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center space-x-2"
+                    >
+                      <MapPin size={16} />
+                      <span>방 예약</span>
+                    </button>
+
+                    <button 
+                      onClick={() => {
+                        router.push('/schedule')
+                        setIsMenuOpen(false)
+                      }}
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center space-x-2"
+                    >
+                      <Calendar size={16} />
+                      <span>일정 관리</span>
+                    </button>
+
                     <button 
                       onClick={() => {
                         router.push('/wishlist')
                         setIsMenuOpen(false)
                       }}
-                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center justify-between"
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors"
                     >
-                      <span>위시리스트</span>
-                      {user?.wishlist?.length > 0 && (
-                        <span className="bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
-                          {user.wishlist.length}
-                        </span>
-                      )}
+                      위시리스트
                     </button>
                     <button 
                       onClick={() => {
                         router.push('/orders')
                         setIsMenuOpen(false)
                       }}
-                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center justify-between"
+                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors"
                     >
-                      <span>주문 내역</span>
-                      {user?.orders?.length > 0 && (
-                        <span className="bg-blue-500 text-white text-xs rounded-full px-2 py-0.5">
-                          {user.orders.length}
-                        </span>
-                      )}
+                      주문 내역
                     </button>
                     <button
                       onClick={handleLogout}

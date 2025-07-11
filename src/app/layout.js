@@ -4,6 +4,7 @@ import './globals.css'
 import { CartProvider } from './contexts/CartContext'
 import { FilterProvider } from './contexts/FilterContext'
 import { AuthProvider } from './contexts/AuthContext'
+import { RoomProvider } from './contexts/RoomContext'  // 새로 추가
 import DebugAuth from './components/DebugAuth'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -24,11 +25,13 @@ export default function RootLayout({ children }) {
         />
         
         <AuthProvider>
-          <CartProvider>
-            <FilterProvider>
-              {children}
-            </FilterProvider>
-          </CartProvider>
+          <RoomProvider>  {/* 새로 추가 */}
+            <CartProvider>
+              <FilterProvider>
+                {children}
+              </FilterProvider>
+            </CartProvider>
+          </RoomProvider>  {/* 새로 추가 */}
         </AuthProvider>
       </body>
     </html>
