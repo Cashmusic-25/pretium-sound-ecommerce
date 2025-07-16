@@ -17,7 +17,8 @@ import {
   File,
   Music,
   Download,
-  Star
+  Star,
+  FolderPlus
 } from 'lucide-react'
 import { useAuth } from '../../../../contexts/AuthContext'
 import { supabase } from '../../../../../lib/supabase'
@@ -65,9 +66,150 @@ export default function AdminProductEditPage() {
   const [success, setSuccess] = useState('')
   const [isMounted, setIsMounted] = useState(false)
 
+  // 카테고리 관리 상태 추가
+  const [availableCategories, setAvailableCategories] = useState([
+    '피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'
+  ])
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [isAddingCategory, setIsAddingCategory] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false)
+
   useEffect(() => {
     setIsMounted(true)
+    loadExistingCategories()
   }, [])
+
+  // 카테고리 관리 함수들 추가
+  const loadExistingCategories = async () => {
+    try {
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('category')
+        .not('category', 'is', null)
+      
+      if (error) throw error
+
+      if (data && data.length > 0) {
+        const uniqueCategories = [...new Set(data.map(item => item.category))]
+        const allCategories = [...new Set([...availableCategories, ...uniqueCategories])]
+        setAvailableCategories(allCategories.sort())
+      }
+    } catch (error) {
+      console.error('카테고리 로딩 실패:', error)
+    }
+  }
+
+  const checkCategoryUsage = async (categoryName) => {
+    try {
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabase = getSupabase()
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('id')
+        .eq('category', categoryName)
+      
+      if (error) throw error
+      return data ? data.length : 0
+    } catch (error) {
+      console.error('카테고리 사용량 체크 실패:', error)
+      return 0
+    }
+  }
+
+  const handleDeleteCategoryConfirm = async (categoryName) => {
+    const usageCount = await checkCategoryUsage(categoryName)
+    
+    if (usageCount > 0) {
+      setError(`"${categoryName}" 카테고리는 ${usageCount}개의 상품에서 사용 중이므로 삭제할 수 없습니다.`)
+      return
+    }
+    
+    setShowDeleteConfirm(categoryName)
+  }
+
+  const handleDeleteCategory = async (categoryName) => {
+    setIsDeletingCategory(true)
+    setError('')
+    
+    try {
+      const usageCount = await checkCategoryUsage(categoryName)
+      if (usageCount > 0) {
+        setError(`삭제 중 오류: "${categoryName}" 카테고리가 ${usageCount}개의 상품에서 사용 중입니다.`)
+        return
+      }
+      
+      const updatedCategories = availableCategories.filter(cat => cat !== categoryName)
+      setAvailableCategories(updatedCategories)
+      
+      if (productForm.category === categoryName) {
+        setProductForm(prev => ({
+          ...prev,
+          category: ''
+        }))
+      }
+      
+      setSuccess(`"${categoryName}" 카테고리가 삭제되었습니다.`)
+      setShowDeleteConfirm(null)
+      
+    } catch (error) {
+      setError('카테고리 삭제 중 오류가 발생했습니다.')
+      console.error('카테고리 삭제 실패:', error)
+    } finally {
+      setIsDeletingCategory(false)
+    }
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(null)
+    setError('')
+  }
+
+  const handleAddNewCategory = async () => {
+    if (!newCategoryName.trim()) {
+      setError('카테고리 이름을 입력해주세요.')
+      return
+    }
+
+    if (availableCategories.includes(newCategoryName.trim())) {
+      setError('이미 존재하는 카테고리입니다.')
+      return
+    }
+
+    setIsAddingCategory(true)
+    setError('')
+
+    try {
+      const updatedCategories = [...availableCategories, newCategoryName.trim()].sort()
+      setAvailableCategories(updatedCategories)
+      
+      setProductForm(prev => ({
+        ...prev,
+        category: newCategoryName.trim()
+      }))
+
+      setSuccess(`"${newCategoryName.trim()}" 카테고리가 추가되었습니다!`)
+      setNewCategoryName('')
+      setShowNewCategoryInput(false)
+
+    } catch (error) {
+      setError('카테고리 추가 중 오류가 발생했습니다.')
+      console.error('카테고리 추가 실패:', error)
+    } finally {
+      setIsAddingCategory(false)
+    }
+  }
+
+  const handleCancelNewCategory = () => {
+    setShowNewCategoryInput(false)
+    setNewCategoryName('')
+    setError('')
+  }
 
   const [productForm, setProductForm] = useState({
     title: '',
@@ -101,10 +243,6 @@ export default function AdminProductEditPage() {
     heroCategoryColor: 'bg-blue-500',
     heroOrder: 0
   })
-
-  const availableCategories = [
-    '피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'
-  ]
 
   const availableIcons = [
     '🎹', '🎸', '🎤', '🥁', '🎻', '🎵', '🎶', '🎼', '🎺', '🎷'
@@ -654,22 +792,113 @@ export default function AdminProductEditPage() {
                     )}
                   </div>
 
-                  {/* 카테고리 */}
+                  {/* 카테고리 - 상품 추가와 동일한 기능으로 교체 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       카테고리 *
                     </label>
-                    <select
-                      value={productForm.category}
-                      onChange={(e) => handleInputChange('category', e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white"
-                      required
-                    >
-                      <option value="">카테고리 선택</option>
-                      {availableCategories.map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
+                    
+                    {!showNewCategoryInput ? (
+                      <div className="space-y-3">
+                        <select
+                          value={productForm.category}
+                          onChange={(e) => handleInputChange('category', e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white"
+                          required
+                        >
+                          <option value="">카테고리 선택</option>
+                          {availableCategories.map(category => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                        
+                        {/* 새 카테고리 추가 버튼 */}
+                        <button
+                          type="button"
+                          onClick={() => setShowNewCategoryInput(true)}
+                          className="flex items-center space-x-2 text-indigo-600 hover:text-indigo-800 font-medium text-sm transition-colors"
+                        >
+                          <FolderPlus size={16} />
+                          <span>새 카테고리 추가</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* 새 카테고리 입력 모드 */
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            placeholder="새 카테고리 이름 입력"
+                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                            maxLength={20}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleAddNewCategory()
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddNewCategory}
+                            disabled={isAddingCategory || !newCategoryName.trim()}
+                            className="px-4 py-3 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                          >
+                            {isAddingCategory ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            ) : (
+                              <Plus size={16} />
+                            )}
+                            <span>{isAddingCategory ? '추가 중...' : '추가'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelNewCategory}
+                            className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                          >
+                            취소
+                          </button>
+                        </div>
+                        
+                        <p className="text-xs text-gray-500">
+                          {newCategoryName.length}/20자 • 엔터키로도 추가할 수 있습니다
+                        </p>
+                        
+                        {/* 기존 카테고리 목록 표시 */}
+                        <div className="bg-gray-50 p-3 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-medium text-gray-700">기존 카테고리:</p>
+                            <p className="text-xs text-gray-500">사용 중인 카테고리는 삭제할 수 없습니다</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {availableCategories.map(category => {
+                              const isDefault = ['피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'].includes(category)
+                              
+                              return (
+                                <div
+                                  key={category}
+                                  className={`inline-flex items-center bg-white text-gray-700 px-2 py-1 rounded text-xs border group ${
+                                    isDefault ? 'border-blue-200 bg-blue-50' : 'border-gray-200'
+                                  }`}
+                                >
+                                  <span className={isDefault ? 'text-blue-700 font-medium' : ''}>{category}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCategoryConfirm(category)}
+                                    className="ml-1 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="카테고리 삭제"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1167,6 +1396,60 @@ export default function AdminProductEditPage() {
           </form>
         </div>
       </div>
+      
+      {/* 카테고리 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <X className="text-red-600" size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">카테고리 삭제 확인</h3>
+                <p className="text-sm text-gray-500">이 작업은 되돌릴 수 없습니다.</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-700 mb-2">
+                <span className="font-medium">"{showDeleteConfirm}"</span> 카테고리를 정말 삭제하시겠습니까?
+              </p>
+              {['피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'].includes(showDeleteConfirm) && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">
+                  ⚠️ 이것은 기본 카테고리입니다. 삭제하면 다시 수동으로 추가해야 합니다.
+                </p>
+              )}
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                disabled={isDeletingCategory}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteCategory(showDeleteConfirm)}
+                disabled={isDeletingCategory}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {isDeletingCategory ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>삭제 중...</span>
+                  </>
+                ) : (
+                  <span>삭제</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
