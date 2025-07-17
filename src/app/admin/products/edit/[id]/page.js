@@ -18,7 +18,8 @@ import {
   Music,
   Download,
   Star,
-  FolderPlus
+  FolderPlus,
+  Trash2
 } from 'lucide-react'
 import { useAuth } from '../../../../contexts/AuthContext'
 import { supabase } from '../../../../../lib/supabase'
@@ -29,11 +30,15 @@ async function uploadProductImage(file) {
   console.log('🔄 이미지 업로드 시작:', file.name, file.size);
   
   try {
+    // 동적 import를 사용하여 인증된 supabase 클라이언트 가져오기
+    const { getSupabase } = await import('../../../../../lib/supabase')
+    const supabaseClient = getSupabase()
+
     const fileExt = file.name.split('.').pop()
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
 
-    const { data, error } = await supabase.storage
+    const { data, error } = await supabaseClient.storage
       .from('product-images')
       .upload(filePath, file)
 
@@ -41,7 +46,7 @@ async function uploadProductImage(file) {
       throw error
     }
 
-    const { data: { publicUrl } } = supabase.storage
+    const { data: { publicUrl } } = supabaseClient.storage
       .from('product-images')
       .getPublicUrl(filePath)
 
@@ -55,6 +60,77 @@ async function uploadProductImage(file) {
   }
 }
 
+// PDF 파일 업로드 함수
+async function uploadProductPDF(file) {
+  console.log('🔄 PDF 업로드 시작:', file.name, file.size);
+  
+  try {
+    // 동적 import를 사용하여 인증된 supabase 클라이언트 가져오기
+    const { getSupabase } = await import('../../../../../lib/supabase')
+    const supabaseClient = getSupabase()
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
+    const filePath = `ebooks/${fileName}`
+
+    const { data, error } = await supabaseClient.storage
+      .from('ebooks')
+      .upload(filePath, file)
+
+    if (error) {
+      throw error
+    }
+
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('ebooks')
+      .getPublicUrl(filePath)
+
+    return {
+      id: Date.now(),
+      name: file.name,
+      url: publicUrl,
+      path: filePath,
+      type: 'pdf',
+      size: file.size
+    }
+  } catch (error) {
+    console.error('💥 PDF 업로드 에러:', error)
+    throw error
+  }
+}
+
+// 기존 파일 삭제 함수
+async function deleteStorageFile(bucket, path) {
+  try {
+    if (!path) return { success: false, error: 'No path provided' }
+    
+    // 동적 import를 사용하여 인증된 supabase 클라이언트 가져오기
+    const { getSupabase } = await import('../../../../../lib/supabase')
+    const supabaseClient = getSupabase()
+    
+    const { data, error } = await supabaseClient.storage
+      .from(bucket)
+      .remove([path])
+
+    if (error) {
+      console.error('파일 삭제 오류:', error)
+      return { success: false, error: error.message }
+    }
+
+    // 삭제된 파일 개수 확인
+    if (data && data.length > 0) {
+      console.log('파일 삭제 성공:', path, '- 삭제된 파일:', data.length)
+      return { success: true, data }
+    } else {
+      console.warn('파일 삭제 실패 - 파일을 찾을 수 없거나 권한 없음:', path)
+      return { success: false, error: 'File not found or permission denied' }
+    }
+  } catch (error) {
+    console.error('파일 삭제 중 오류:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 export default function AdminProductEditPage() {
   const router = useRouter()
   const params = useParams()
@@ -65,6 +141,10 @@ export default function AdminProductEditPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isMounted, setIsMounted] = useState(false)
+
+  // PDF 업로드 관련 상태 추가
+  const [isUploadingPDF, setIsUploadingPDF] = useState(false)
+  const [originalFiles, setOriginalFiles] = useState([]) // 수정 전 원본 파일들 저장
 
   // 카테고리 관리 상태 추가
   const [availableCategories, setAvailableCategories] = useState([
@@ -244,6 +324,10 @@ export default function AdminProductEditPage() {
     heroOrder: 0
   })
 
+  // 원본 이미지 정보 저장 (삭제용)
+  const [originalImagePath, setOriginalImagePath] = useState(null)
+  const [originalHeroImagePath, setOriginalHeroImagePath] = useState(null)
+
   const availableIcons = [
     '🎹', '🎸', '🎤', '🥁', '🎻', '🎵', '🎶', '🎼', '🎺', '🎷'
   ]
@@ -303,6 +387,26 @@ export default function AdminProductEditPage() {
       }
   
       setProduct(foundProduct)
+      
+      // 원본 파일 정보 저장 (삭제용)
+      setOriginalFiles(foundProduct.files || [])
+      
+      // 원본 이미지 경로 저장 (삭제용)
+      if (foundProduct.image_url) {
+        const imagePath = foundProduct.image_url.match(/products\/(.+)$/)?.[1]
+        const fullImagePath = imagePath ? `products/${imagePath}` : null
+        setOriginalImagePath(fullImagePath)
+        console.log('🖼️ 원본 이미지 경로:', fullImagePath)
+      }
+      if (foundProduct.hero_image_url) {
+        const heroImagePath = foundProduct.hero_image_url.match(/products\/(.+)$/)?.[1]
+        const fullHeroImagePath = heroImagePath ? `products/${heroImagePath}` : null
+        setOriginalHeroImagePath(fullHeroImagePath)
+        console.log('🌟 원본 히어로 이미지 경로:', fullHeroImagePath)
+      }
+      
+      // 파일 정보 디버깅
+      console.log('📁 불러온 파일들:', foundProduct.files)
       
       // 폼에 상품 데이터 설정 (히어로 필드 포함)
       setProductForm({
@@ -364,6 +468,157 @@ export default function AdminProductEditPage() {
     }))
     if (error) setError('')
     if (success) setSuccess('')
+  }
+
+  // PDF 파일 업로드 핸들러
+  const handlePDFUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    // PDF 파일 검증
+    if (file.type !== 'application/pdf') {
+      setError('PDF 파일만 업로드 가능합니다.')
+      return
+    }
+
+    // 파일 크기 검증 (50MB 제한)
+    const maxSize = 50 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError('PDF 파일 크기는 50MB 이하만 가능합니다.')
+      return
+    }
+
+    setIsUploadingPDF(true)
+    setError('')
+
+    try {
+      // 사용자 인증 상태 확인
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabaseClient = getSupabase()
+      
+      const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
+      console.log('🔐 현재 사용자:', user)
+      
+      if (authError || !user) {
+        setError('로그인이 필요합니다. 다시 로그인해주세요.')
+        return
+      }
+
+      // 사용자 권한 확인
+      const { data: profile } = await supabaseClient
+        .from('user_profiles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single()
+      
+      console.log('👤 사용자 프로필:', profile)
+      
+      if (!profile || profile.role !== 'admin') {
+        setError('관리자 권한이 필요합니다.')
+        return
+      }
+
+      const uploadedFile = await uploadProductPDF(file)
+      
+      // 새 파일로 교체 (기존 파일들은 제출 시 삭제됨)
+      setProductForm(prev => ({
+        ...prev,
+        files: [uploadedFile]
+      }))
+
+      setSuccess(`PDF 파일 "${file.name}" 업로드 완료!`)
+      
+    } catch (error) {
+      console.error('PDF 업로드 에러:', error)
+      setError('PDF 업로드 실패: ' + error.message)
+    } finally {
+      setIsUploadingPDF(false)
+      // 파일 input 초기화
+      e.target.value = ''
+    }
+  }
+
+  // PDF 파일 제거 핸들러
+  const handleRemovePDF = (fileToRemove) => {
+    setProductForm(prev => ({
+      ...prev,
+      files: prev.files.filter(file => 
+        (file.id && file.id !== fileToRemove.id) || 
+        (file.filename && file.filename !== fileToRemove.filename)
+      )
+    }))
+    setSuccess('PDF 파일이 제거되었습니다.')
+  }
+
+
+
+  // PDF 파일 다운로드 핸들러 (새로 추가)
+  const handleDownloadPDF = async (file) => {
+    try {
+      setError('')
+      console.log('🔽 관리자 PDF 다운로드 시작:', file)
+      
+      // 파일 ID 추출
+      const fileId = file.id || file.path?.split('/').pop()?.split('.')[0] || Date.now()
+      
+      // 현재 세션의 토큰 가져오기
+      const { getSupabase } = await import('../../../../../lib/supabase')
+      const supabase = getSupabase()
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        setError('로그인이 필요합니다.')
+        return
+      }
+      
+      // Authorization 헤더와 함께 요청
+      const response = await fetch(`/api/download/prduct-pdf/${fileId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'PDF 다운로드에 실패했습니다.')
+      }
+      
+      // 응답에서 signed URL 받기
+      const downloadData = await response.json()
+      
+      if (!downloadData.success || !downloadData.downloadUrl) {
+        throw new Error('다운로드 링크 생성에 실패했습니다.')
+      }
+      
+      // signed URL로 실제 파일 다운로드
+      const fileResponse = await fetch(downloadData.downloadUrl)
+      if (!fileResponse.ok) {
+        throw new Error('파일 다운로드에 실패했습니다.')
+      }
+      
+      // Blob으로 파일 다운로드
+      const blob = await fileResponse.blob()
+      const url = window.URL.createObjectURL(blob)
+      
+      // 다운로드 링크 생성 및 클릭
+      const a = document.createElement('a')
+      a.href = url
+      a.download = downloadData.filename || file.name || file.filename || 'product.pdf'
+      document.body.appendChild(a)
+      a.click()
+      
+      // 정리
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      setSuccess(`"${downloadData.filename}" 다운로드가 시작되었습니다.`)
+      
+    } catch (error) {
+      console.error('❌ 관리자 PDF 다운로드 실패:', error)
+      setError('PDF 다운로드 실패: ' + error.message)
+    }
   }
 
   // 상품 이미지 업로드 핸들러
@@ -473,7 +728,8 @@ export default function AdminProductEditPage() {
     setProductForm(prev => ({
       ...prev,
       image: null,
-      imagePreview: null
+      imagePreview: null,
+      imagePath: null
     }))
   }
 
@@ -582,6 +838,63 @@ export default function AdminProductEditPage() {
     return true
   }
 
+  // 기존 파일들 삭제 함수
+  const deleteOriginalFiles = async () => {
+    for (const file of originalFiles) {
+      // 기존 데이터 구조: filePath 또는 path 속성 확인
+      const filePath = file.filePath || file.path
+      if (filePath) {
+        try {
+          const result = await deleteStorageFile('ebooks', filePath)
+          if (result.success) {
+            console.log('✅ 기존 PDF 파일 삭제 완료:', filePath)
+          } else {
+            console.error('❌ 기존 PDF 파일 삭제 실패:', result.error)
+          }
+        } catch (error) {
+          console.error('❌ 기존 PDF 파일 삭제 실패:', error)
+        }
+      }
+    }
+  }
+
+  // 기존 이미지들 삭제 함수
+  const deleteOriginalImages = async (imageChanged, heroImageChanged) => {
+    // 상품 이미지가 변경된 경우
+    if (imageChanged && originalImagePath) {
+      try {
+        console.log('🗑️ 기존 상품 이미지 삭제 시도:', originalImagePath)
+        const result = await deleteStorageFile('product-images', originalImagePath)
+        if (result.success) {
+          console.log('✅ 기존 상품 이미지 삭제 완료:', originalImagePath)
+        } else {
+          console.error('❌ 기존 상품 이미지 삭제 실패:', result.error)
+        }
+      } catch (error) {
+        console.error('❌ 기존 상품 이미지 삭제 실패:', error)
+      }
+    }
+    
+    // 히어로 이미지가 변경된 경우
+    if (heroImageChanged && originalHeroImagePath) {
+      try {
+        console.log('🗑️ 기존 히어로 이미지 삭제 시도:', originalHeroImagePath)
+        const result = await deleteStorageFile('product-images', originalHeroImagePath)
+        if (result.success) {
+          console.log('✅ 기존 히어로 이미지 삭제 완료:', originalHeroImagePath)
+        } else {
+          console.error('❌ 기존 히어로 이미지 삭제 실패:', result.error)
+        }
+      } catch (error) {
+        console.error('❌ 기존 히어로 이미지 삭제 실패:', error)
+      }
+    }
+    
+    if (!imageChanged && !heroImageChanged) {
+      console.log('ℹ️ 이미지 변경 없음 - 삭제 작업 건너뜀')
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -593,6 +906,34 @@ export default function AdminProductEditPage() {
     try {
       const priceNum = parseInt(productForm.price.replace(/[,]/g, ''))
   
+      // 변경 사항 확인 - URL 정규화해서 비교
+      const filesChanged = JSON.stringify(originalFiles) !== JSON.stringify(productForm.files)
+      
+      // 이미지 URL에서 파일명만 추출해서 비교
+      const getImagePath = (url) => {
+        if (!url) return null
+        const match = url.match(/products\/(.+)$/)
+        return match ? `products/${match[1]}` : null
+      }
+      
+      const currentImagePath = getImagePath(productForm.image)
+      const currentHeroImagePath = getImagePath(productForm.heroImage)
+      
+      const imageChanged = originalImagePath && originalImagePath !== currentImagePath
+      const heroImageChanged = originalHeroImagePath && originalHeroImagePath !== currentHeroImagePath
+      
+      console.log('🔍 변경 감지:', {
+        filesChanged,
+        imageChanged,
+        heroImageChanged,
+        originalImagePath,
+        originalHeroImagePath,
+        currentImagePath,
+        currentHeroImagePath,
+        productFormImage: productForm.image,
+        productFormHeroImage: productForm.heroImage
+      })
+      
       // 업데이트된 상품 데이터 생성
       const updatedProductData = {
         title: productForm.title.trim(),
@@ -633,9 +974,35 @@ export default function AdminProductEditPage() {
       if (error) {
         throw error
       }
+
+      // 파일이 변경된 경우 기존 파일들 삭제
+      if (filesChanged && originalFiles.length > 0) {
+        console.log('🗑️ 기존 PDF 파일들 삭제 시작...')
+        await deleteOriginalFiles()
+        console.log('✅ 기존 PDF 파일들 삭제 완료')
+      }
+
+      // 이미지가 변경된 경우 기존 이미지들 삭제
+      if (imageChanged || heroImageChanged) {
+        console.log('🗑️ 기존 이미지들 삭제 시작...')
+        await deleteOriginalImages(imageChanged, heroImageChanged)
+        console.log('✅ 기존 이미지들 삭제 완료')
+      }
   
       console.log('✅ 상품 수정 성공:', data)
-      setSuccess(`상품이 성공적으로 수정되었습니다!${productForm.showInHero ? ' 히어로 슬라이더 설정이 적용되었습니다.' : ''}`)
+      
+      let successMessage = '상품이 성공적으로 수정되었습니다!'
+      if (productForm.showInHero) {
+        successMessage += ' 히어로 슬라이더 설정이 적용되었습니다.'
+      }
+      if (filesChanged) {
+        successMessage += ' PDF 파일이 업데이트되었습니다.'
+      }
+      if (imageChanged || heroImageChanged) {
+        successMessage += ' 이미지가 업데이트되었습니다.'
+      }
+      
+      setSuccess(successMessage)
       
       setTimeout(() => {
         router.push('/admin/products')
@@ -657,6 +1024,15 @@ export default function AdminProductEditPage() {
   const handlePriceChange = (value) => {
     const formatted = formatPrice(value)
     handleInputChange('price', formatted)
+  }
+
+  // 파일 크기 포맷 함수
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
   if (isLoadingProduct) {
@@ -706,7 +1082,7 @@ export default function AdminProductEditPage() {
             
             <div>
               <h1 className="text-3xl font-bold text-gray-800">상품 수정</h1>
-              <p className="text-gray-600 mt-2">상품 정보와 히어로 슬라이더 설정을 수정하세요</p>
+              <p className="text-gray-600 mt-2">상품 정보, PDF 파일 및 히어로 슬라이더 설정을 수정하세요</p>
             </div>
           </div>
 
@@ -792,7 +1168,7 @@ export default function AdminProductEditPage() {
                     )}
                   </div>
 
-                  {/* 카테고리 - 상품 추가와 동일한 기능으로 교체 */}
+                  {/* 카테고리 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       카테고리 *
@@ -899,6 +1275,101 @@ export default function AdminProductEditPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* PDF 파일 관리 섹션 */}
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center space-x-2">
+                  <File className="text-indigo-600" size={24} />
+                  <span>PDF 파일 관리</span>
+                </h2>
+
+                <div className="space-y-4">
+                  {/* 현재 PDF 파일 표시 */}
+                  {productForm.files.length > 0 ? (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium text-gray-700">현재 PDF 파일:</h3>
+                      {productForm.files.map((file, index) => (
+                        <div key={file.id || file.filename || index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex-shrink-0">
+                              <File className="text-red-500" size={24} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{file.filename || file.name}</p>
+                              <p className="text-xs text-gray-500">
+                                {file.size ? formatFileSize(file.size) : '크기 정보 없음'} • PDF 파일
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* 다운로드 및 제거 버튼 */}
+                          <div className="flex items-center space-x-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPDF(file)}
+                              className="flex items-center space-x-1 text-indigo-600 hover:text-indigo-800 text-sm font-medium transition-colors px-3 py-1 rounded-md hover:bg-indigo-50"
+                              disabled={isUploadingPDF}
+                              title="PDF 파일 다운로드"
+                            >
+                              <Download size={16} />
+                              <span>다운로드</span>
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePDF(file)}
+                              className="flex items-center space-x-1 text-red-600 hover:text-red-800 text-sm font-medium transition-colors px-3 py-1 rounded-md hover:bg-red-50"
+                              disabled={isUploadingPDF}
+                              title="PDF 파일 제거"
+                            >
+                              <Trash2 size={16} />
+                              <span>제거</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <File className="mx-auto mb-4" size={48} />
+                      <p>업로드된 PDF 파일이 없습니다</p>
+                    </div>
+                  )}
+
+                  {/* PDF 파일 업로드 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      새 PDF 파일 업로드 (기존 파일 교체)
+                    </label>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 px-4 py-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                        <Upload className="text-gray-500" size={20} />
+                        <span className="text-sm font-medium text-gray-700">
+                          {isUploadingPDF ? 'PDF 업로드 중...' : 'PDF 파일 선택'}
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handlePDFUpload}
+                          disabled={isUploadingPDF}
+                          className="hidden"
+                        />
+                      </label>
+                      
+                      {isUploadingPDF && (
+                        <div className="flex items-center space-x-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-500"></div>
+                          <span className="text-sm text-gray-600">업로드 중...</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <p className="text-xs text-gray-500 mt-2">
+                      PDF 파일만 업로드 가능 (최대 50MB) • 새 파일 업로드 시 기존 파일은 자동으로 삭제됩니다
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1385,10 +1856,10 @@ export default function AdminProductEditPage() {
               </button>
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || isUploadingPDF}
                 className="px-6 py-3 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                {isLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
+                {(isLoading || isUploadingPDF) && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                 <Save size={20} />
                 <span>{isLoading ? '수정 중...' : '상품 수정'}</span>
               </button>
