@@ -326,7 +326,7 @@ export default function SalesStatistics() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {salesData.map((item, index) => (
-                  <tr key={item.productId} className="hover:bg-gray-50">
+                  <tr key={item.productId || `product-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
