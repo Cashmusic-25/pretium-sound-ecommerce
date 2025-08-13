@@ -191,7 +191,6 @@ export default function OrdersPage() {
 
   const getStatusColor = (status) => {
     const colors = {
-      [ORDER_STATUS.PENDING]: 'bg-yellow-100 text-yellow-800',
       [ORDER_STATUS.PROCESSING]: 'bg-blue-100 text-blue-800',
       [ORDER_STATUS.SHIPPED]: 'bg-purple-100 text-purple-800',
       [ORDER_STATUS.DELIVERED]: 'bg-green-100 text-green-800',
@@ -340,9 +339,9 @@ export default function OrdersPage() {
 
                         {/* 주문 상품들 */}
                         <div className="space-y-4">
-                          {order.items.map((item) => (
+                          {order.items.map((item, index) => (
                             <OrderItemWithDownloads
-                              key={item.id}
+                              key={`${order.id}-${item.product_id || item.id || index}`}
                               item={item}
                               orderId={order.id}
                               canDownload={canDownload(order.status)}
@@ -436,10 +435,20 @@ function OrderItemWithDownloads({
         const { getSupabase } = await import('@/lib/supabase');
         const supabase = getSupabase();
         
+        // item.product_id 또는 item.id를 사용하여 상품 조회
+        const productId = item.product_id || item.id;
+        
+        if (!productId) {
+          console.warn('상품 ID가 없습니다:', item);
+          setProductFiles([]);
+          setLoading(false);
+          return;
+        }
+        
         const { data: product, error } = await supabase
           .from('products')
           .select('files')
-          .eq('id', item.id)
+          .eq('id', productId)
           .single();
 
         if (error) {
@@ -457,7 +466,7 @@ function OrderItemWithDownloads({
     };
 
     fetchProductFiles();
-  }, [item.id]);
+  }, [item.product_id, item.id]);
 
   return (
     <div className="bg-white p-4 rounded-xl">
@@ -492,13 +501,14 @@ function OrderItemWithDownloads({
           
           <div className="flex flex-wrap gap-2">
             {productFiles.map((file) => {
-              const downloadKey = `${orderId}-${item.id}-${file.id}`;
+              const productId = item.product_id || item.id;
+              const downloadKey = `${orderId}-${productId}-${file.id}`;
               const isDownloading = downloadingFiles.has(downloadKey);
               
               return (
                 <button
                   key={file.id}
-                  onClick={() => onDownload(orderId, item.id, file.id, file.filename)}
+                  onClick={() => onDownload(orderId, productId, file.id, file.filename)}
                   disabled={isDownloading}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                     isDownloading

@@ -21,14 +21,38 @@ export default function AdminRoomsPage() {
   const [newRoom, setNewRoom] = useState({
     name: '',
     capacity: '',
-    description: ''
+    description: '',
+    facilities: {
+      piano: false,           // 피아노
+      drum_set: false,        // 드럼세트
+      midi_computer: false,   // 미디 가능한 컴퓨터
+      speakers: false,        // 스피커 시스템
+      microphone: false,      // 마이크
+      audio_interface: false, // 오디오 인터페이스
+      music_stand: false,     // 악보대
+      amp: false,            // 앰프
+      keyboard: false,        // 키보드/신디사이저
+      guitar: false          // 기타
+    }
   })
 
   // 수정 폼 데이터
   const [editFormData, setEditFormData] = useState({
     name: '',
     capacity: '',
-    description: ''
+    description: '',
+    facilities: {
+      piano: false,
+      drum_set: false,
+      midi_computer: false,
+      speakers: false,
+      microphone: false,
+      audio_interface: false,
+      music_stand: false,
+      amp: false,
+      keyboard: false,
+      guitar: false
+    }
   })
 
   // 관리자 권한 확인
@@ -37,6 +61,32 @@ export default function AdminRoomsPage() {
       router.push('/')
     }
   }, [user, isAdmin, loading, router])
+
+  // 시설별 한국어 이름
+  const facilityNames = {
+    piano: '피아노',
+    drum_set: '드럼세트', 
+    midi_computer: '미디 컴퓨터',
+    speakers: '스피커',
+    microphone: '마이크',
+    audio_interface: '오디오 인터페이스',
+    music_stand: '악보대',
+    amp: '앰프',
+    keyboard: '키보드/신디사이저',
+    guitar: '기타'
+  }
+
+  // 과목별 필수 시설 매핑
+  const subjectRequirements = {
+    'piano': ['piano', 'music_stand'],
+    'drum': ['drum_set'],
+    'vocal': ['microphone', 'speakers'],
+    'guitar': ['guitar', 'amp', 'music_stand'],
+    'bass': ['amp', 'music_stand'],
+    'composition': ['midi_computer', 'speakers', 'keyboard'],
+    'mixing': ['midi_computer', 'speakers', 'audio_interface'],
+    'general': ['music_stand'] // 일반/기타 악기
+  }
 
   // 방 추가 핸들러
   const handleAddRoom = async (e) => {
@@ -54,30 +104,74 @@ export default function AdminRoomsPage() {
         x: randomX,
         y: randomY,
         width: 100,
-        height: 80
+        height: 80,
+        facilities: JSON.stringify(newRoom.facilities) // 시설 정보 JSON으로 저장
       })
       
       // 폼 초기화
       setNewRoom({
         name: '',
         capacity: '',
-        description: ''
+        description: '',
+        facilities: {
+          piano: false,
+          drum_set: false,
+          midi_computer: false,
+          speakers: false,
+          microphone: false,
+          audio_interface: false,
+          music_stand: false,
+          amp: false,
+          keyboard: false,
+          guitar: false
+        }
       })
       setShowAddForm(false)
       
       alert('방이 성공적으로 추가되었습니다! 배치도에서 위치와 크기를 조정해보세요.')
+      
+      // 방 목록 새로고침 (페이지 리로드로 최신 데이터 확인)
+      window.location.reload()
     } catch (error) {
-      alert('방 추가 실패: ' + error.message)
+      console.error('방 추가 전체 오류:', error)
+      alert('방 추가 실패: ' + (error.message || '알 수 없는 오류가 발생했습니다.'))
     }
   }
 
   // 방 수정 모달 열기
   const openEditModal = (room) => {
     setEditingRoom(room)
+    
+    // 기존 시설 정보 파싱 (JSON 문자열이거나 객체일 수 있음)
+    let facilities = {
+      piano: false,
+      drum_set: false,
+      midi_computer: false,
+      speakers: false,
+      microphone: false,
+      audio_interface: false,
+      music_stand: false,
+      amp: false,
+      keyboard: false,
+      guitar: false
+    }
+
+    if (room.facilities) {
+      try {
+        const parsed = typeof room.facilities === 'string' 
+          ? JSON.parse(room.facilities) 
+          : room.facilities
+        facilities = { ...facilities, ...parsed }
+      } catch (error) {
+        console.warn('시설 정보 파싱 실패:', error)
+      }
+    }
+
     setEditFormData({
       name: room.name,
       capacity: room.capacity || '',
-      description: room.description || ''
+      description: room.description || '',
+      facilities
     })
   }
 
@@ -89,7 +183,8 @@ export default function AdminRoomsPage() {
       await updateRoom(editingRoom.id, {
         name: editFormData.name,
         capacity: parseInt(editFormData.capacity) || null,
-        description: editFormData.description
+        description: editFormData.description,
+        facilities: JSON.stringify(editFormData.facilities) // 시설 정보 포함
       })
       setEditingRoom(null)
       alert('방 정보가 수정되었습니다!')
@@ -232,6 +327,9 @@ export default function AdminRoomsPage() {
                     크기 (W × H)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    보유 시설
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     설명
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -253,6 +351,28 @@ export default function AdminRoomsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{room.width || 100} × {room.height || 80}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        {(() => {
+                          try {
+                            const facilities = typeof room.facilities === 'string' 
+                              ? JSON.parse(room.facilities) 
+                              : room.facilities || {}
+                            
+                            const activeFacilities = Object.entries(facilities)
+                              .filter(([key, value]) => value)
+                              .map(([key]) => facilityNames[key])
+                              .filter(Boolean)
+                            
+                            return activeFacilities.length > 0 
+                              ? activeFacilities.slice(0, 3).join(', ') + (activeFacilities.length > 3 ? ' 외' : '')
+                              : '없음'
+                          } catch {
+                            return '없음'
+                          }
+                        })()}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900 max-w-xs truncate">
@@ -330,6 +450,35 @@ export default function AdminRoomsPage() {
                     placeholder="방에 대한 설명을 입력하세요"
                   />
                 </div>
+
+                {/* 시설 선택 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    보유 시설 및 장비
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {Object.entries(facilityNames).map(([key, name]) => (
+                      <label key={key} className="flex items-center space-x-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={newRoom.facilities[key]}
+                          onChange={(e) => setNewRoom({
+                            ...newRoom,
+                            facilities: {
+                              ...newRoom.facilities,
+                              [key]: e.target.checked
+                            }
+                          })}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-gray-700">{name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    * 과목별 수업에 필요한 시설을 선택해주세요
+                  </p>
+                </div>
                 
                 <div className="bg-gray-50 p-3 rounded-md">
                   <p className="text-sm text-gray-600">
@@ -401,6 +550,32 @@ export default function AdminRoomsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     rows="3"
                   />
+                </div>
+
+                {/* 시설 선택 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    보유 시설 및 장비
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {Object.entries(facilityNames).map(([key, name]) => (
+                      <label key={key} className="flex items-center space-x-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.facilities[key]}
+                          onChange={(e) => setEditFormData({
+                            ...editFormData,
+                            facilities: {
+                              ...editFormData.facilities,
+                              [key]: e.target.checked
+                            }
+                          })}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-gray-700">{name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 
                 <div className="bg-blue-50 p-3 rounded-md">

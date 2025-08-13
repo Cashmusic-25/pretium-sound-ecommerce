@@ -152,7 +152,6 @@ export default function OrderCompleteContent() {
 
   const getStatusDisplay = (status) => {
     const statusMap = {
-      'pending': { text: '결제 대기', color: 'text-yellow-600', bg: 'bg-yellow-100' },
       'processing': { text: '결제 완료', color: 'text-green-600', bg: 'bg-green-100' },
       'shipped': { text: '배송중', color: 'text-blue-600', bg: 'bg-blue-100' },
       'delivered': { text: '배송완료', color: 'text-green-600', bg: 'bg-green-100' },
@@ -455,10 +454,20 @@ function ProductWithDownloads({
         const { getSupabase } = await import('../../../lib/supabase');
         const supabase = getSupabase();
         
+        // item.product_id 또는 item.id를 사용하여 상품 조회
+        const productId = item.product_id || item.id;
+        
+        if (!productId) {
+          console.warn('상품 ID가 없습니다:', item);
+          setProductFiles([]);
+          setLoading(false);
+          return;
+        }
+        
         const { data: product, error } = await supabase
           .from('products')
           .select('files')
-          .eq('id', item.id)
+          .eq('id', productId)
           .single();
 
         if (error) {
@@ -476,7 +485,7 @@ function ProductWithDownloads({
     };
 
     fetchProductFiles();
-  }, [item.id]);
+  }, [item.product_id, item.id]);
 
   return (
     <div className="border border-gray-200 rounded-lg p-4">
@@ -504,7 +513,8 @@ function ProductWithDownloads({
           
           <div className="space-y-2">
             {productFiles.map((file) => {
-              const downloadKey = `${item.id}-${file.id}`;
+              const productId = item.product_id || item.id;
+              const downloadKey = `${productId}-${file.id}`;
               const isDownloading = downloadingFiles.has(downloadKey);
               
               return (
@@ -520,7 +530,7 @@ function ProductWithDownloads({
                   </div>
                   
                   <button
-                    onClick={() => onDownload(item.id, file.id, file.filename)}
+                    onClick={() => onDownload(productId, file.id, file.filename)}
                     disabled={isDownloading}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                       isDownloading

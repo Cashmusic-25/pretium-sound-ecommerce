@@ -11,8 +11,6 @@ export async function getAllVisibleProducts() {
       return []
     }
 
-    console.log('🔄 getAllVisibleProducts - DB 조회 시작')
-
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -33,9 +31,6 @@ export async function getAllVisibleProducts() {
       // files 필드가 없으면 빈 배열로 설정
       files: product.files || []
     }))
-
-    console.log('✅ getAllVisibleProducts - 조회 성공:', formattedProducts.length, '개')
-    console.log('📋 상품 ID 목록:', formattedProducts.map(p => `${p.id}: ${p.title}`))
     
     return formattedProducts
 

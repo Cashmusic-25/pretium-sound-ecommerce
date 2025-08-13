@@ -3,9 +3,32 @@
 import { useEffect, useState } from 'react'
 import { useRoom } from '@/app/contexts/RoomContext'
 import RoomLayout from '@/components/room/RoomLayout'
+import { useAuth } from '@/app/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
 
 export default function RoomsPage() {
   const { rooms, loading } = useRoom()
+  const { userProfile } = useAuth()
+  const router = useRouter()
+
+  // 학생 접근 차단
+  if (userProfile && userProfile.role === 'student') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">🚫</div>
+          <div className="text-xl font-semibold text-gray-800 mb-2">접근 권한이 없습니다</div>
+          <div className="text-gray-600 mb-4">이 페이지는 강사와 관리자만 이용할 수 있습니다.</div>
+          <button
+            onClick={() => router.push('/')}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            홈으로 돌아가기
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

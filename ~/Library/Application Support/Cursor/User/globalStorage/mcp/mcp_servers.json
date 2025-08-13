@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "simple": {
+      "command": "node",
+      "args": ["/Users/jasonkim/Desktop/프레티움 사운드/어플리케이션/pretium-sound/simple-mcp.js"]
+    }
+  }
+} 

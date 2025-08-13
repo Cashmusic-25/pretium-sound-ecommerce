@@ -28,12 +28,13 @@ import Header from '../components/Header'
 export default function AdminDashboard() {
   const router = useRouter()
   
-  const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders } = useAuth()
+  const { user, isAuthenticated, isAdmin, getAllUsers, getAllOrders, makeAuthenticatedRequest } = useAuth()
   
   const [stats, setStats] = useState(null)
   const [allUsers, setAllUsers] = useState([])
   const [recentOrders, setRecentOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+
 
   useEffect(() => {
     if (!isAdmin) {
@@ -43,6 +44,8 @@ export default function AdminDashboard() {
   
     loadAdminData()
   }, [isAdmin, router])
+
+
 
   const loadAdminData = async () => {
     setIsLoading(true)
@@ -409,7 +412,24 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </button>
+
+            <button
+              onClick={() => router.push('/admin/payments')}
+              className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-all duration-300 text-left group"
+            >
+              <div className="flex items-center space-x-4">
+                <div className="bg-red-100 p-3 rounded-lg group-hover:bg-red-200 transition-colors">
+                  <DollarSign className="text-red-600" size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-800">수업 결제 관리</h4>
+                  <p className="text-sm text-gray-600">출석 기반 자동 결제 관리</p>
+                </div>
+              </div>
+            </button>
           </div>
+
+
         </div>
       </div>
     </div>

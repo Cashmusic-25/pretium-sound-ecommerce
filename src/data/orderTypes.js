@@ -1,7 +1,6 @@
 // 주문 상태 타입
 export const ORDER_STATUS = {
-  PENDING: 'pending',           // 결제 대기
-  PROCESSING: 'processing',     // 처리 중
+  PROCESSING: 'processing',     // 처리 중 (결제 완료)
   SHIPPED: 'shipped',          // 배송 중
   DELIVERED: 'delivered',      // 배송 완료
   CANCELLED: 'cancelled'       // 취소됨
@@ -58,7 +57,7 @@ export const createOrder = (orderData) => {
     orderNumber: generateOrderNumber(),
     ...orderData,
     createdAt: new Date().toISOString(),
-    status: ORDER_STATUS.PENDING,
+    status: ORDER_STATUS.PROCESSING,
     downloadExpiresAt: new Date(Date.now() + DOWNLOAD_SETTINGS.DOWNLOAD_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString()
   }
 }
@@ -77,7 +76,6 @@ export const generateOrderNumber = () => {
 // 주문 상태 한글 변환
 export const getOrderStatusLabel = (status) => {
   const labels = {
-    [ORDER_STATUS.PENDING]: '결제 대기',
     [ORDER_STATUS.PROCESSING]: '처리 중',
     [ORDER_STATUS.SHIPPED]: '배송 중',
     [ORDER_STATUS.DELIVERED]: '배송 완료',

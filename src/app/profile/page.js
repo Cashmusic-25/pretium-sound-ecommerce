@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Edit3, Mail, Calendar, Package, Heart, ShoppingBag, Trophy, ArrowLeft } from 'lucide-react'
+import { User, Edit3, Mail, Calendar, Package, Heart, ShoppingBag, Trophy, ArrowLeft, BookOpen } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
 import Header from '../components/Header'
@@ -10,7 +10,7 @@ import Avatar from '../components/Avatar'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, isAuthenticated, updateUser } = useAuth()
+  const { user, userProfile, isAuthenticated, isStudent, updateUser } = useAuth()
   const { getTotalItems } = useCart()
   
   const [isEditing, setIsEditing] = useState(false)
@@ -246,18 +246,34 @@ export default function ProfilePage() {
                 <h3 className="text-2xl font-bold text-gray-800 mb-6">빠른 액션</h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <button
-                    onClick={() => router.push('/orders')}
-                    className="flex items-center space-x-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-300 text-left"
-                  >
-                    <div className="bg-indigo-100 p-3 rounded-lg">
-                      <Package className="text-indigo-600" size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-800">주문 내역</h4>
-                      <p className="text-sm text-gray-600">구매한 상품들을 확인하세요</p>
-                    </div>
-                  </button>
+                  {/* 학생인 경우 내 수업, 아니면 주문 내역 */}
+                  {userProfile?.role === 'student' ? (
+                    <button
+                      onClick={() => router.push('/student/lessons')}
+                      className="flex items-center space-x-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-300 text-left"
+                    >
+                      <div className="bg-blue-100 p-3 rounded-lg">
+                        <BookOpen className="text-blue-600" size={24} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800">내 수업</h4>
+                        <p className="text-sm text-gray-600">등록된 수업을 확인하세요</p>
+                      </div>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => router.push('/orders')}
+                      className="flex items-center space-x-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-300 text-left"
+                    >
+                      <div className="bg-indigo-100 p-3 rounded-lg">
+                        <Package className="text-indigo-600" size={24} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-800">주문 내역</h4>
+                        <p className="text-sm text-gray-600">구매한 상품들을 확인하세요</p>
+                      </div>
+                    </button>
+                  )}
                   
                   <button
                     onClick={() => router.push('/wishlist')}

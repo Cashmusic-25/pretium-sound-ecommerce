@@ -4,8 +4,6 @@ import { supabase } from '../../../lib/supabase'
 
 export async function GET() {
   try {
-    console.log('🔄 히어로 슬라이더 데이터 조회 시작')
-
     if (!supabase) {
       console.error('❌ Supabase 연결 실패')
       return NextResponse.json({
@@ -42,9 +40,6 @@ export async function GET() {
       throw error
     }
 
-    console.log(`✅ 히어로 슬라이더 ${heroSlides?.length || 0}개 조회 완료`)
-    console.log('📋 히어로 슬라이드 상품 ID들:', heroSlides?.map(s => s.id))
-
     // 데이터 가공
     const processedSlides = heroSlides?.map(slide => ({
       id: slide.id,
@@ -60,7 +55,7 @@ export async function GET() {
       icon: slide.icon || '🎵'
     })) || []
 
-    console.log('🎨 가공된 슬라이드 데이터:', processedSlides.map(s => `${s.id}: ${s.title}`))
+
 
     return NextResponse.json({
       success: true,

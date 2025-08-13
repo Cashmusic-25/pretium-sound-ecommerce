@@ -10,7 +10,7 @@ import { ko } from 'date-fns/locale'
 
 export default function AdminClassesPage() {
   const { rooms, classes, loading, addClass, updateClass, deleteClass } = useRoom()
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isTeacher, userProfile } = useAuth()
   const router = useRouter()
   
   const [showAddForm, setShowAddForm] = useState(false)
@@ -28,7 +28,6 @@ export default function AdminClassesPage() {
     start_time: '09:00',
     end_time: '10:30',
     teacher: '',
-    max_students: 20,
     students: [],
     is_recurring: false,
     recurrence_pattern: 'weekly',
@@ -45,7 +44,6 @@ export default function AdminClassesPage() {
     start_time: '',
     end_time: '',
     teacher: '',
-    max_students: 20,
     students: [],
     is_recurring: false,
     recurrence_pattern: 'weekly',
@@ -59,10 +57,10 @@ export default function AdminClassesPage() {
 
   // 관리자 권한 확인
   useEffect(() => {
-    if (!loading && (!user || !isAdmin)) {
+    if (!loading && (!user || (!isAdmin() && !isTeacher()))) {
       router.push('/')
     }
-  }, [user, isAdmin, loading, router])
+  }, [user, isAdmin, isTeacher, loading, router])
 
   // 필터링된 수업 목록
   const filteredClasses = classes.filter(cls => {
@@ -93,28 +91,20 @@ export default function AdminClassesPage() {
   // 수업 추가 핸들러
   const handleAddClass = async (e) => {
     e.preventDefault()
-    
+
+    let classData = {
+      ...newClass,
+      students: newClass.students.filter(student => student.trim() !== ''),
+    }
+
+    // 강사라면 본인 정보 자동 입력
+    if (isTeacher()) {
+      classData.teacher = userProfile?.name || user?.email || '강사';
+      classData.created_by = user.id;
+    }
+
     try {
-      console.log('Adding class with data:', newClass) // 디버깅용
-      
-      const classData = {
-        title: newClass.title,
-        description: newClass.description,
-        room_id: newClass.room_id,
-        date: newClass.date,
-        start_time: newClass.start_time,
-        end_time: newClass.end_time,
-        teacher: newClass.teacher,
-        max_students: newClass.max_students,
-        students: newClass.students.filter(student => student.trim() !== ''),
-        is_recurring: newClass.is_recurring,
-        recurrence_pattern: newClass.recurrence_pattern,
-        recurrence_type: newClass.recurrence_type,
-        recurrence_end_date: newClass.recurrence_end_date
-      }
-      
       await addClass(classData)
-      
       // 폼 초기화
       setNewClass({
         title: '',
@@ -124,7 +114,6 @@ export default function AdminClassesPage() {
         start_time: '09:00',
         end_time: '10:30',
         teacher: '',
-        max_students: 20,
         students: [],
         is_recurring: false,
         recurrence_pattern: 'weekly',
@@ -132,15 +121,12 @@ export default function AdminClassesPage() {
         recurrence_end_date: format(addDays(new Date(), 30), 'yyyy-MM-dd')
       })
       setShowAddForm(false)
-      
       alert('수업이 성공적으로 추가되었습니다!')
     } catch (error) {
       console.error('Add class error:', error)
-      // 더 구체적인 에러 메시지 표시
       const errorMessage = error.message.includes('이미 다른 수업이 예약')
         ? `⚠️ 시간 충돌!\n\n${error.message}\n\n다른 시간을 선택해주세요.`
         : `수업 추가 실패: ${error.message}`
-      
       alert(errorMessage)
     }
   }
@@ -156,7 +142,6 @@ export default function AdminClassesPage() {
       start_time: cls.start_time,
       end_time: cls.end_time,
       teacher: cls.teacher || '',
-      max_students: cls.max_students || 20,
       students: Array.isArray(cls.students) ? [...cls.students] : [],
       is_recurring: cls.is_recurring || false,
       recurrence_pattern: cls.recurrence_pattern || 'weekly',
@@ -180,7 +165,6 @@ export default function AdminClassesPage() {
         start_time: editFormData.start_time,
         end_time: editFormData.end_time,
         teacher: editFormData.teacher,
-        max_students: editFormData.max_students,
         students: editFormData.students.filter(student => student.trim() !== ''),
         is_recurring: editFormData.is_recurring,
         recurrence_pattern: editFormData.recurrence_pattern,
@@ -276,7 +260,7 @@ export default function AdminClassesPage() {
     )
   }
 
-  if (!user || !isAdmin) {
+  if (!user || (!isAdmin() && !isTeacher())) {
     return null
   }
 
@@ -285,18 +269,29 @@ export default function AdminClassesPage() {
       <div className="container mx-auto px-4 py-8">
         {/* 헤더 */}
         <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">수업 관리</h1>
-            <p className="text-gray-600 mt-2">수업을 추가, 수정, 삭제하고 반복 일정을 관리할 수 있습니다.</p>
+          <div className="flex items-center space-x-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex items-center space-x-1 text-gray-600 hover:text-gray-900 px-2 py-1 rounded-md border border-gray-300 bg-white shadow-sm"
+            >
+              <span className="material-icons">arrow_back</span>
+              <span>뒤로가기</span>
+            </button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">수업 관리</h1>
+              <p className="text-gray-600 mt-2">수업을 추가, 수정, 삭제하고 반복 일정을 관리할 수 있습니다.</p>
+            </div>
           </div>
-          
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={20} />
-            <span>수업 추가</span>
-          </button>
+          {(isAdmin() || isTeacher()) && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={20} />
+              <span>수업 추가</span>
+            </button>
+          )}
         </div>
 
         {/* 통계 카드 */}
@@ -432,7 +427,6 @@ export default function AdminClassesPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {cls.students?.length || 0}명
-                        {cls.max_students && ` / ${cls.max_students}명`}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -590,60 +584,46 @@ export default function AdminClassesPage() {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      최대 학생 수
+                      참가 학생
                     </label>
-                    <input
-                      type="number"
-                      value={newClass.max_students}
-                      onChange={(e) => setNewClass({...newClass, max_students: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      min="1"
-                    />
-                  </div>
-                </div>
-
-                {/* 학생 관리 */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    참가 학생
-                  </label>
-                  <div className="flex space-x-2 mb-2">
-                    <input
-                      type="text"
-                      value={newStudentName}
-                      onChange={(e) => setNewStudentName(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="학생 이름 입력"
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStudent())}
-                    />
-                    <button
-                      type="button"
-                      onClick={addStudent}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                    >
-                      추가
-                    </button>
-                  </div>
-                  
-                  {newClass.students.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {newClass.students.map((student, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                        >
-                          {student}
-                          <button
-                            type="button"
-                            onClick={() => removeStudent(index)}
-                            className="ml-2 text-blue-600 hover:text-blue-800"
-                          >
-                            <X size={14} />
-                          </button>
-                        </span>
-                      ))}
+                    <div className="flex space-x-2 mb-2">
+                      <input
+                        type="text"
+                        value={newStudentName}
+                        onChange={(e) => setNewStudentName(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="학생 이름 입력"
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStudent())}
+                      />
+                      <button
+                        type="button"
+                        onClick={addStudent}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                      >
+                        추가
+                      </button>
                     </div>
-                  )}
+                    
+                    {newClass.students.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {newClass.students.map((student, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                          >
+                            {student}
+                            <button
+                              type="button"
+                              onClick={() => removeStudent(index)}
+                              className="ml-2 text-blue-600 hover:text-blue-800"
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 반복 설정 */}
@@ -839,60 +819,46 @@ export default function AdminClassesPage() {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      최대 학생 수
+                      참가 학생
                     </label>
-                    <input
-                      type="number"
-                      value={editFormData.max_students}
-                      onChange={(e) => setEditFormData({...editFormData, max_students: parseInt(e.target.value)})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      min="1"
-                    />
-                  </div>
-                </div>
-
-                {/* 학생 관리 (수정) */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    참가 학생
-                  </label>
-                  <div className="flex space-x-2 mb-2">
-                    <input
-                      type="text"
-                      value={editNewStudentName}
-                      onChange={(e) => setEditNewStudentName(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="학생 이름 입력"
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStudentToEdit())}
-                    />
-                    <button
-                      type="button"
-                      onClick={addStudentToEdit}
-                      className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                    >
-                      추가
-                    </button>
-                  </div>
-                  
-                  {editFormData.students.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {editFormData.students.map((student, index) => (
-                        <span
-                          key={index}
-                          className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                        >
-                          {student}
-                          <button
-                            type="button"
-                            onClick={() => removeStudentFromEdit(index)}
-                            className="ml-2 text-blue-600 hover:text-blue-800"
-                          >
-                            <X size={14} />
-                          </button>
-                        </span>
-                      ))}
+                    <div className="flex space-x-2 mb-2">
+                      <input
+                        type="text"
+                        value={editNewStudentName}
+                        onChange={(e) => setEditNewStudentName(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="학생 이름 입력"
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStudentToEdit())}
+                      />
+                      <button
+                        type="button"
+                        onClick={addStudentToEdit}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                      >
+                        추가
+                      </button>
                     </div>
-                  )}
+                    
+                    {editFormData.students.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {editFormData.students.map((student, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
+                          >
+                            {student}
+                            <button
+                              type="button"
+                              onClick={() => removeStudentFromEdit(index)}
+                              className="ml-2 text-blue-600 hover:text-blue-800"
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 반복 설정 (수정) */}

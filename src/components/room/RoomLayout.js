@@ -1,9 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useRoom } from '@/app/contexts/RoomContext'
+import { format, addDays, startOfWeek } from 'date-fns'
+import { ko } from 'date-fns/locale'
+import { Calendar, Clock, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react'
 
 const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
+  const router = useRouter()
   const { rooms, classes, getClassesByDate, updateRoom } = useRoom()
   const [selectedRooms, setSelectedRooms] = useState([])
   const [activeRoomIds, setActiveRoomIds] = useState([])
@@ -15,6 +20,15 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [roomClassInfo, setRoomClassInfo] = useState({})
   
+  // 날짜와 시간 선택 관련 상태
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedTime, setSelectedTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const [selectedRoomForSchedule, setSelectedRoomForSchedule] = useState(null)
+  const [roomUpcomingClasses, setRoomUpcomingClasses] = useState([])
+  
   // 데이터 가져오기 간격 설정 - 30초
   const FETCH_INTERVAL = 30000
   
@@ -25,7 +39,7 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
   
   const svgRef = useRef(null)
   
-  // 현재 수업 중인 방 목록 가져오기
+  // 선택된 날짜와 시간의 수업 중인 방 목록 가져오기
   const fetchActiveRooms = useCallback(() => {
     // 커스텀 activeRoomIds가 제공된 경우 그것을 사용
     if (customActiveRoomIds !== null) {
@@ -37,41 +51,110 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
     try {
       setLoading(true)
       
-      // 현재 시간
-      const now = new Date()
-      const nowHour = now.getHours()
-      const nowMinutes = now.getMinutes()
-      const currentTime = `${String(nowHour).padStart(2, '0')}:${String(nowMinutes).padStart(2, '0')}`
+      // 선택된 날짜의 클래스 가져오기
+      const selectedDateClasses = getClassesByDate(selectedDate)
       
-      // 오늘 클래스 가져오기 (일반 + 가상 클래스)
-      const todayClasses = getClassesByDate(now)
-      
-      // 지금 사용 중인 방 찾기
-      const activeClasses = todayClasses.filter(cls => {
-        return cls.start_time <= currentTime && cls.end_time >= currentTime
+      // 선택된 시간에 정확히 수업 중인 방 찾기 (종료 시간은 제외)
+      const activeClasses = selectedDateClasses.filter(cls => {
+        return cls.start_time <= selectedTime && cls.end_time > selectedTime
       })
       
       // 사용 중인 방 ID 추출 (중복 제거)
       const roomIds = [...new Set(activeClasses.map(cls => cls.room_id))]
-      console.log('Active room IDs:', roomIds)
+      
+      // 방별 수업 정보 저장
+      const roomInfo = {}
+      selectedDateClasses.forEach(cls => {
+        if (!roomInfo[cls.room_id]) {
+          roomInfo[cls.room_id] = {
+            current: null,
+            upcoming: []
+          }
+        }
+        
+        // 선택된 시간에 진행 중인 수업 (종료 시간은 제외)
+        if (cls.start_time <= selectedTime && cls.end_time > selectedTime) {
+          roomInfo[cls.room_id].current = cls
+        } else if (cls.start_time > selectedTime) {
+          // 선택된 시간 이후 수업
+          roomInfo[cls.room_id].upcoming.push(cls)
+        }
+      })
+      
+      // 다가오는 수업 정렬
+      Object.keys(roomInfo).forEach(roomId => {
+        roomInfo[roomId].upcoming.sort((a, b) => a.start_time.localeCompare(b.start_time))
+      })
+      
       setActiveRoomIds(roomIds)
+      setRoomClassInfo(roomInfo)
       
       // 마지막 업데이트 시간 기록
-      lastUpdateRef.current = now
+      lastUpdateRef.current = new Date()
       
     } catch (error) {
       console.error('방 사용 상태를 가져오는 중 오류 발생:', error)
     } finally {
       setLoading(false)
     }
-  }, [getClassesByDate, customActiveRoomIds])
-  
+  }, [getClassesByDate, customActiveRoomIds, selectedDate, selectedTime])
+
+  // 특정 방의 다음 예정 수업 찾기
+  const findRoomUpcomingClasses = useCallback((roomId) => {
+    if (!roomId) {
+      setRoomUpcomingClasses([])
+      return
+    }
+    
+    const now = new Date()
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const upcoming = []
+    
+    // 앞으로 30일간 검색
+    for (let i = 0; i < 30; i++) {
+      const checkDate = addDays(now, i)
+      const classesForDate = getClassesByDate(checkDate)
+      
+      // 해당 방의 수업만 필터링
+      const roomClasses = classesForDate.filter(cls => cls.room_id === roomId)
+      
+      roomClasses.forEach(cls => {
+        const isToday = i === 0
+        // 오늘이면 현재 시간 이후 수업만, 다른 날이면 모든 수업
+        if (!isToday || cls.start_time > currentTime) {
+          upcoming.push({
+            ...cls,
+            date: format(checkDate, 'yyyy-MM-dd'),
+            displayDate: format(checkDate, 'M월 d일 (EEE)', { locale: ko }),
+            daysFromNow: i
+          })
+        }
+      })
+    }
+    
+    // 날짜와 시간 순으로 정렬
+    upcoming.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date)
+      return a.start_time.localeCompare(b.start_time)
+    })
+    
+    setRoomUpcomingClasses(upcoming.slice(0, 5)) // 최대 5개만 표시
+  }, [getClassesByDate])
+
+  // selectedDate 또는 selectedTime 변경 시 데이터 업데이트
+  useEffect(() => {
+    if (rooms.length > 0) {
+      fetchActiveRooms()
+      // 선택된 방이 있으면 해당 방의 예정 수업 업데이트
+      if (selectedRoomForSchedule) {
+        findRoomUpcomingClasses(selectedRoomForSchedule.id)
+      }
+    }
+  }, [rooms, selectedDate, selectedTime, fetchActiveRooms, findRoomUpcomingClasses, selectedRoomForSchedule])
+
   // 컴포넌트 마운트/언마운트 처리
   useEffect(() => {
     if (rooms.length > 0) {
-      // 첫 로드 시 데이터 가져오기
-      fetchActiveRooms()
-      
       // 편집 모드가 아닐 때만 주기적으로 업데이트
       if (!editMode) {
         // 기존 인터벌 정리
@@ -230,8 +313,10 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
   
   const handleRoomClick = useCallback((room, e) => {
     if (!editMode) {
-      // 보기 모드에서는 단일 방만 선택
+      // 보기 모드에서는 단일 방만 선택하고 해당 방의 예정 수업 표시
       setSelectedRooms([room])
+      setSelectedRoomForSchedule(room)
+      findRoomUpcomingClasses(room.id)
       return
     }
     
@@ -262,7 +347,7 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
       // Ctrl/Cmd 키를 누르지 않았으면 이 방만 선택
       setSelectedRooms([room])
     }
-  }, [editMode, multiSelectMode, selectedRooms])
+  }, [editMode, multiSelectMode, selectedRooms, findRoomUpcomingClasses])
   
   const handleMouseDown = useCallback((e, room) => {
     if (!editMode) return
@@ -413,50 +498,222 @@ const RoomLayout = ({ editMode = false, customActiveRoomIds = null }) => {
   
   return (
     <div className="room-layout-container">
-      {/* 범례 */}
-      <div className="flex flex-wrap items-center justify-between mb-4 p-4 bg-gray-50 rounded-lg">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-500 rounded"></div>
-            <span className="text-sm text-gray-700">빈 방</span>
+      {/* 헤더와 뒤로가기 버튼 */}
+      <div className="mb-6 flex items-center justify-between">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5 mr-2" />
+          뒤로가기
+        </button>
+        
+        <h1 className="text-2xl font-bold text-gray-900">방 예약 현황</h1>
+        
+        {/* 빈 공간 (대칭을 위해) */}
+        <div className="w-[120px]"></div>
+      </div>
+
+      {/* 날짜와 시간 선택 */}
+      <div className="mb-6 space-y-4">
+        {/* 날짜 및 시간 선택 */}
+        <div className="bg-white rounded-lg shadow-lg p-4">
+          <h3 className="text-lg font-semibold mb-3 flex items-center">
+            <Calendar className="w-5 h-5 mr-2" />
+            날짜 및 시간 선택
+          </h3>
+          
+          {/* 날짜 선택 */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setSelectedDate(addDays(selectedDate, -1))}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="text-center">
+                <div className="text-xl font-bold text-gray-900">
+                  {format(selectedDate, 'yyyy년 M월 d일', { locale: ko })}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {format(selectedDate, 'EEEE', { locale: ko })}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* 오늘 버튼 */}
+            <div className="mt-3 text-center">
+              <button
+                onClick={() => {
+                  const now = new Date()
+                  setSelectedDate(now)
+                  setSelectedTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+                }}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+              >
+                지금
+              </button>
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-red-500 rounded"></div>
-            <span className="text-sm text-gray-700">사용 중</span>
+          
+          {/* 시간 선택 */}
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-center space-x-4">
+              <Clock className="w-5 h-5 text-gray-600" />
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">시간:</label>
+                <input
+                  type="time"
+                  value={selectedTime}
+                  onChange={(e) => setSelectedTime(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            
+            {/* 자주 사용하는 시간 버튼들 */}
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'].map(time => (
+                <button
+                  key={time}
+                  onClick={() => setSelectedTime(time)}
+                  className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                    selectedTime === time
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {time}
+                </button>
+              ))}
+            </div>
           </div>
-          {editMode && (
+        </div>
+        
+        {/* 선택된 방의 예정 수업 */}
+        {selectedRoomForSchedule && roomUpcomingClasses.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-4">
+            <h3 className="text-lg font-semibold mb-3 flex items-center">
+              <Clock className="w-5 h-5 mr-2" />
+              {selectedRoomForSchedule.name} - 다음 예정 수업
+            </h3>
+            <div className="space-y-2">
+              {roomUpcomingClasses.map((cls, index) => (
+                <div 
+                  key={`${cls.id}-${cls.date}`}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                  onClick={() => setSelectedDate(new Date(cls.date))}
+                >
+                  <div>
+                    <div className="font-medium text-gray-900">
+                      {cls.type === 'personal_lesson' ? cls.title : cls.title}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {cls.displayDate} • {cls.start_time}~{cls.end_time}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-blue-600">
+                      {cls.daysFromNow === 0 ? '오늘' : `${cls.daysFromNow}일 후`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-center">
+              <button
+                onClick={() => {
+                  setSelectedRoomForSchedule(null)
+                  setRoomUpcomingClasses([])
+                  setSelectedRooms([])
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
+              >
+                선택 해제
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* 방 선택 안내 */}
+        {!selectedRoomForSchedule && (
+          <div className="bg-blue-50 rounded-lg p-4 text-center">
+            <div className="text-blue-600 font-medium mb-2">
+              방을 클릭하여 예정 수업을 확인하세요
+            </div>
+            <div className="text-blue-500 text-sm">
+              특정 방의 다음 예정 수업을 볼 수 있습니다
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 현재 선택 정보 및 범례 */}
+      <div className="mb-4 space-y-3">
+        {/* 현재 선택된 날짜/시간 정보 */}
+        <div className="bg-blue-50 rounded-lg p-4 text-center">
+          <div className="text-blue-800 font-semibold">
+            📅 {format(selectedDate, 'yyyy년 M월 d일 (EEEE)', { locale: ko })} • ⏰ {selectedTime}
+          </div>
+          <div className="text-blue-600 text-sm mt-1">
+            위 시간에 수업이 있는 방은 빨간색, 없는 방은 초록색으로 표시됩니다
+          </div>
+        </div>
+        
+        {/* 범례 */}
+        <div className="flex flex-wrap items-center justify-between p-4 bg-gray-50 rounded-lg">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center space-x-2">
-              <div className="w-4 h-4 bg-blue-500 border-2 border-blue-700 rounded"></div>
-              <span className="text-sm text-gray-700">선택됨</span>
+              <div className="w-4 h-4 bg-green-500 rounded"></div>
+              <span className="text-sm text-gray-700">사용 가능</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-red-500 rounded"></div>
+              <span className="text-sm text-gray-700">사용 중</span>
+            </div>
+            {editMode && (
+              <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 bg-blue-500 border-2 border-blue-700 rounded"></div>
+                <span className="text-sm text-gray-700">선택됨</span>
+              </div>
+            )}
+          </div>
+          
+          {editMode && (
+            <div className="flex items-center space-x-2 mt-2 sm:mt-0">
+              <label className="flex items-center space-x-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={multiSelectMode}
+                  onChange={(e) => setMultiSelectMode(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <span>다중 선택 모드</span>
+              </label>
+              <button 
+                onClick={handleSelectAll}
+                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              >
+                {selectedRooms.length === rooms.length ? '모두 선택 해제' : '모두 선택'}
+              </button>
+              <button 
+                onClick={saveRoomPositions}
+                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                변경사항 저장
+              </button>
             </div>
           )}
         </div>
-        
-        {editMode && (
-          <div className="flex items-center space-x-2 mt-2 sm:mt-0">
-            <label className="flex items-center space-x-2 text-sm">
-              <input
-                type="checkbox"
-                checked={multiSelectMode}
-                onChange={(e) => setMultiSelectMode(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <span>다중 선택 모드</span>
-            </label>
-            <button 
-              onClick={handleSelectAll}
-              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-            >
-              {selectedRooms.length === rooms.length ? '모두 선택 해제' : '모두 선택'}
-            </button>
-            <button 
-              onClick={saveRoomPositions}
-              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              변경사항 저장
-            </button>
-          </div>
-        )}
       </div>
       
       {/* 방 배치도 */}

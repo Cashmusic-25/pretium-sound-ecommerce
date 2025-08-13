@@ -1,0 +1,13 @@
+{
+    "window.commandCenter": true,
+    "terminal.integrated.sendKeybindingsToShell": true,
+    "mcp.servers": {
+        "supabase": {
+            "command": "node",
+            "args": ["/Users/jasonkim/Desktop/프레티움 사운드/어플리케이션/pretium-sound/supabase-mcp-server.js"],
+            "env": {
+                "NODE_ENV": "production"
+            }
+        }
+    }
+} 

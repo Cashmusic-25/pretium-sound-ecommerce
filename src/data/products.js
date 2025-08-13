@@ -352,6 +352,8 @@ export const products = [
   }
 ]
 
+// 기존 products.js 파일 마지막에 추가할 함수들
+
 // ID로 상품 찾기 함수
 export function getProductById(id) {
   return products.find(product => product.id === parseInt(id))
@@ -363,8 +365,57 @@ export function getProductFiles(id) {
   return product?.files || []
 }
 
-// 파일 ID로 특정 파일 찾기 함수
+// 파일 ID로 특정 파일 찾기 함수 (수정됨)
 export function getFileById(productId, fileId) {
   const files = getProductFiles(productId)
   return files.find(file => file.id === fileId)
+}
+
+// 모든 자료를 플랫 리스트로 반환하는 함수 (새로 추가)
+export function getAllResources() {
+  const allResources = []
+  products.forEach(product => {
+    if (product.files) {
+      product.files.forEach(file => {
+        allResources.push({
+          id: `${product.id}_${file.id}`,
+          productId: product.id,
+          fileId: file.id,
+          title: file.filename,
+          description: file.description,
+          type: file.type,
+          size: file.size,
+          category: product.category,
+          productTitle: product.title,
+          filePath: file.filePath,
+          downloadUrl: `/api/download/resource/${file.id}?productId=${product.id}`
+        })
+      })
+    }
+  })
+  return allResources
+}
+
+// 카테고리별 자료 개수 반환 함수 (새로 추가)
+export function getResourceStats() {
+  const resources = getAllResources()
+  const stats = {
+    total: resources.length,
+    byCategory: {},
+    byType: {}
+  }
+
+  resources.forEach(resource => {
+    stats.byCategory[resource.category] = (stats.byCategory[resource.category] || 0) + 1
+    stats.byType[resource.type] = (stats.byType[resource.type] || 0) + 1
+  })
+
+  return stats
+}
+
+// 강사가 접근 가능한 자료 필터링 함수 (새로 추가)
+export function getTeacherAccessibleResources(teacherId = null) {
+  // 현재는 모든 자료에 접근 가능하지만, 
+  // 나중에 강사별 권한 관리가 필요한 경우 여기서 필터링
+  return getAllResources()
 }

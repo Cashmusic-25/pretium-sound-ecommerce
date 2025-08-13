@@ -82,7 +82,7 @@ export function RoomProvider({ children }) {
 
       if (error) throw error
       setRooms(data || [])
-      console.log('Rooms fetched:', data?.length || 0)
+
     } catch (error) {
       console.error('Error fetching rooms:', error)
     }
@@ -102,7 +102,7 @@ export function RoomProvider({ children }) {
       // 가상 반복 수업 캐시 업데이트
       updateVirtualClassesCache(data || [])
       setLoading(false)
-      console.log('Classes fetched:', data?.length || 0)
+
     } catch (error) {
       console.error('Error fetching classes:', error)
       setLoading(false)
@@ -174,7 +174,7 @@ export function RoomProvider({ children }) {
     })
     
     setCachedVirtualClasses(newVirtualClasses)
-    console.log(`Generated ${newVirtualClasses.length} virtual classes`)
+
   }, [])
 
   // 특정 날짜의 수업 목록 가져오기 (먼저 정의해야 함)
@@ -185,12 +185,25 @@ export function RoomProvider({ children }) {
     }
     
     const dateStr = format(date, 'yyyy-MM-dd')
+    const dayOfWeek = date.getDay() // 0=일요일, 1=월요일, ..., 6=토요일
     
     // 일반 수업과 가상 수업 병합
     const regularClasses = classes.filter(cls => cls.date === dateStr)
     const virtualClassesForDate = cachedVirtualClasses.filter(cls => cls.date === dateStr)
     
-    return [...regularClasses, ...virtualClassesForDate]
+    // 개인 레슨 (요일 기반)을 가상 클래스 형태로 변환
+    const personalLessons = [] // 개인 레슨 데이터가 없으므로 빈 배열 반환
+    
+    // 목요일에만 로그 표시 (스팸 방지)
+    if (dayOfWeek === 4) {
+      console.log(`📅 ${dateStr} (목요일) 일정:`, {
+        regularClasses: regularClasses.length,
+        virtualClasses: virtualClassesForDate.length,
+        personalLessons: personalLessons.length
+      })
+    }
+    
+    return [...regularClasses, ...virtualClassesForDate, ...personalLessons]
   }, [classes, cachedVirtualClasses])
 
   // 시간 충돌 확인 (getClassesByDate 사용하므로 이후에 정의)
@@ -232,6 +245,8 @@ export function RoomProvider({ children }) {
   // 방 추가
   const addRoom = useCallback(async (roomData) => {
     try {
+      console.log('방 추가 시작:', roomData)
+      
       const { data, error } = await supabase
         .from('rooms')
         .insert([{
@@ -241,10 +256,15 @@ export function RoomProvider({ children }) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase 방 추가 오류:', error)
+        throw new Error(`방 추가 실패: ${error.message || error.details || '알 수 없는 오류'}`)
+      }
+      
+      console.log('방 추가 성공:', data)
       return data.id
     } catch (error) {
-      console.error('Error adding room:', error)
+      console.error('방 추가 오류 전체:', error)
       throw error
     }
   }, [supabase])
@@ -270,7 +290,6 @@ export function RoomProvider({ children }) {
         .from('classes')
         .insert([{
           ...classData,
-          created_by: user?.id,
           created_at: new Date().toISOString()
         }])
         .select()
@@ -284,11 +303,13 @@ export function RoomProvider({ children }) {
       console.error('Error adding class:', error)
       throw error
     }
-  }, [supabase, user, checkTimeConflict])
+  }, [supabase, checkTimeConflict])
 
   // 방 정보 업데이트
   const updateRoom = useCallback(async (roomId, roomData) => {
     try {
+      console.log('방 수정 시작:', { roomId, roomData })
+      
       const { error } = await supabase
         .from('rooms')
         .update({
@@ -297,7 +318,12 @@ export function RoomProvider({ children }) {
         })
         .eq('id', roomId)
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase 방 수정 오류:', error)
+        throw new Error(`방 수정 실패: ${error.message || error.details || '알 수 없는 오류'}`)
+      }
+      
+      console.log('방 수정 성공')
       
       // 성공적으로 업데이트되면 로컬 상태도 즉시 업데이트
       setRooms(prevRooms => 
@@ -307,7 +333,7 @@ export function RoomProvider({ children }) {
       )
       
     } catch (error) {
-      console.error('Error updating room:', error)
+      console.error('방 수정 오류 전체:', error)
       throw error
     }
   }, [supabase])

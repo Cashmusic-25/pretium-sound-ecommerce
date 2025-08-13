@@ -9,8 +9,11 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export async function GET(request, { params }) {
   try {
     const { orderId, fileId } = params;
+    
+    // fileId를 숫자로 변환
+    const numericFileId = parseInt(fileId);
 
-    console.log('📥 다운로드 요청:', { orderId, fileId });
+    console.log('📥 다운로드 요청:', { orderId, fileId, numericFileId });
 
     // 1. Authorization 헤더 확인
     const authHeader = request.headers.get('authorization');
@@ -75,30 +78,41 @@ export async function GET(request, { params }) {
     let targetFile = null;
     let productFound = false;
 
+    console.log('🔍 주문 아이템 분석:', order.items);
+
     for (const item of order.items) {
-      console.log(`🔍 상품 ${item.id} 파일 조회 중...`);
+      console.log(`🔍 상품 ${item.product_id || item.id} 파일 조회 중...`);
+      console.log(`🔍 아이템 상세:`, item);
       
       // 상품 정보를 데이터베이스에서 조회 (products 테이블은 RLS 비활성화됨)
       const { data: product, error: productError } = await supabaseClient
         .from('products')
         .select('files')
-        .eq('id', item.id)
+        .eq('id', item.product_id || item.id)  // product_id 우선, 없으면 id 사용
         .single();
 
       if (productError) {
-        console.error(`❌ 상품 ${item.id} 조회 실패:`, productError);
+        console.error(`❌ 상품 ${item.product_id || item.id} 조회 실패:`, productError);
         continue;
       }
 
+      console.log(`📁 상품 ${item.product_id || item.id} 조회 성공:`, product);
+
       if (product && product.files && Array.isArray(product.files)) {
-        console.log(`📁 상품 ${item.id} 파일 목록:`, product.files.map(f => f.id));
+        console.log(`📁 상품 ${item.product_id || item.id} 파일 목록:`, product.files.map(f => ({ id: f.id, name: f.name, filename: f.filename, path: f.path })));
         
         // 파일 배열에서 해당 파일 찾기
-        const file = product.files.find(f => f.id === fileId);
+        const file = product.files.find(f => {
+          return (
+            f.id === numericFileId ||
+            f.id === parseInt(numericFileId) ||
+            String(f.id) === String(numericFileId)
+          );
+        });
         if (file) {
           targetFile = file;
           productFound = true;
-          console.log(`✅ 파일 찾음:`, file.filename);
+          console.log(`✅ 파일 찾음:`, file.name || file.filename);
           break;
         }
       }
@@ -112,14 +126,15 @@ export async function GET(request, { params }) {
     }
 
     // 7. 다운로드 이력 기록 (Service Role 사용)
-    await recordDownloadHistory(supabaseAdmin, user.id, orderId, fileId, targetFile.filename);
+    await recordDownloadHistory(supabaseAdmin, user.id, orderId, numericFileId, targetFile.name || targetFile.filename);
 
     // 8. Supabase Storage에서 signed URL 생성 (Service Role 필요)
-    console.log('☁️ Signed URL 생성 중:', targetFile.filePath);
+    const filePath = targetFile.path || targetFile.filePath;
+    console.log('☁️ Signed URL 생성 중:', filePath);
     
     const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
       .from('ebooks')
-      .createSignedUrl(targetFile.filePath, 3600); // 1시간 = 3600초
+      .createSignedUrl(filePath, 3600); // 1시간 = 3600초
 
     if (signedUrlError) {
       console.error('❌ Signed URL 생성 실패:', signedUrlError);
@@ -134,7 +149,7 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       success: true,
       downloadUrl: signedUrlData.signedUrl,
-      filename: targetFile.filename,
+      filename: targetFile.name || targetFile.filename,
       fileSize: targetFile.size,
       expiresIn: 3600, // 1시간
       remainingDays: 365 - daysDiff,
@@ -161,7 +176,7 @@ async function recordDownloadHistory(supabaseAdmin, userId, orderId, fileId, fil
         {
           user_id: userId,
           order_id: orderId,
-          file_id: fileId,
+          file_id: String(fileId),  // text 타입이므로 문자열로 변환
           filename: filename,
           downloaded_at: new Date().toISOString()
         }
