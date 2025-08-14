@@ -90,15 +90,10 @@ export default function RoomBookingModal({
     return `${hours}:${minutes}`
   }
 
-  const formatDate = (dateString) => {
-    if (!dateString) return ''
-    const date = new Date(dateString)
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long'
-    })
+  const getDayName = (dayNumber) => {
+    const days = ['일', '월', '화', '수', '목', '금', '토']
+    if (dayNumber === null || dayNumber === undefined) return ''
+    return days[Number(dayNumber)] || ''
   }
 
   const calculateEndTime = (startTime, durationMinutes) => {
@@ -145,7 +140,7 @@ export default function RoomBookingModal({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-blue-800">
               <div className="flex items-center">
                 <Calendar className="w-4 h-4 mr-2" />
-                <span>{dayOfWeek !== null && dayOfWeek !== undefined ? formatDate(new Date(dayOfWeek)) : '날짜 미선택'}</span>
+                <span>{dayOfWeek !== null && dayOfWeek !== undefined ? `${getDayName(dayOfWeek)}요일 (선택된 날짜 기준)` : '요일 미선택'}</span>
               </div>
               <div className="flex items-center">
                 <Clock className="w-4 h-4 mr-2" />
