@@ -74,7 +74,7 @@ export async function GET(request) {
       }
     }
 
-    // 데이터 포맷팅
+    // 데이터 포맷팅 (기본 필드)
     const formattedPayments = payments.map(payment => {
       // class_paid 테이블에서 결제 완료 정보 확인
       const paidRecords = payment.class_paid || [];
@@ -114,10 +114,47 @@ export async function GET(request) {
       };
     });
 
+    // 미결제 출석 수(unpaid_present_count) 계산: 총 present - 결제합계 (is_hidden에 의존하지 않음)
+    try {
+      const classIds = Array.from(new Set(formattedPayments.map(p => p.class_id).filter(Boolean)));
+      const studentIds = Array.from(new Set(formattedPayments.map(p => p.student_id).filter(Boolean)));
+
+      let presentMap = new Map();
+      if (classIds.length > 0 && studentIds.length > 0) {
+        const { data: ar } = await supabase
+          .from('attendance_records')
+          .select('class_id, student_id, status')
+          .in('class_id', classIds)
+          .in('student_id', studentIds)
+          .eq('status', 'present');
+        if (Array.isArray(ar)) {
+          for (const row of ar) {
+            const key = `${row.class_id}::${row.student_id}`;
+            presentMap.set(key, (presentMap.get(key) || 0) + 1);
+          }
+        }
+      }
+
+      // 병합
+      for (const p of formattedPayments) {
+        const key = `${p.class_id}::${p.student_id}`;
+        const totalPresent = presentMap.get(key) || 0;
+        const totalPaid = p.total_paid_amount || 0;
+        const unpaid = Math.max(totalPresent - totalPaid, 0);
+        p.unpaid_present_count = unpaid;
+        // remaining_attendance를 최신 계산값으로 보정
+        p.remaining_attendance = unpaid;
+      }
+    } catch (e) {
+      console.error('Failed to compute unpaid_present_count:', e);
+      // 실패 시 0으로 채움
+      for (const p of formattedPayments) {
+        if (typeof p.unpaid_present_count !== 'number') p.unpaid_present_count = 0;
+      }
+    }
+
     // 캐시 방지 헤더 추가
-    const response = NextResponse.json({
-      payments: formattedPayments
-    });
+    const response = NextResponse.json({ payments: formattedPayments });
 
     // 브라우저 캐시 방지
     response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');

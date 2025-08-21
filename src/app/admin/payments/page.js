@@ -327,23 +327,30 @@ export default function AdminPaymentsPage() {
     }
   };
 
-  // 결제 분류 - 출석 4회 이상과 결제 완료를 분리
+  const getRemaining = (payment) => {
+    const unpaid = typeof payment.unpaid_present_count === 'number' ? payment.unpaid_present_count : null;
+    const legacy = typeof payment.remaining_attendance === 'number' ? payment.remaining_attendance : null;
+    if (unpaid !== null) return unpaid;
+    return legacy ?? 0;
+  };
+
+  // 결제 분류 - 결제 발생(부분/완납), 출석 4회 이상 대기, 4회 미만 대기
   const getPaymentCategories = () => {
-    // 결제 완료된 수업 (부분 결제 포함)
-    const paidPayments = payments.filter(payment => 
-      payment.total_paid_amount > 0
-    );
-    
-    // 출석 4회 이상이지만 아직 결제되지 않은 수업 (남은 출석 기준)
-    const highAttendancePending = payments.filter(payment => 
-      payment.remaining_attendance >= 4 && payment.total_paid_amount === 0
-    );
-    
-    // 출석 4회 미만이고 결제되지 않은 수업 (남은 출석 기준) - 부분 결제 남은 경우도 포함
-    const lowAttendance = payments.filter(payment => 
-      payment.remaining_attendance < 4
-    );
-    
+    // 결제가 1회 이상 발생한 항목(부분 결제 포함)
+    const paidPayments = payments.filter(payment => (payment.total_paid_amount ?? 0) > 0);
+
+    // 남은 출석 4회 이상이면서 아직 완납되지 않은 항목
+    const highAttendancePending = payments.filter(payment => {
+      const rem = getRemaining(payment);
+      return rem >= 4;
+    });
+
+    // 남은 출석 1~3회이면서 아직 완납되지 않은 항목 (부분 결제 포함)
+    const lowAttendance = payments.filter(payment => {
+      const rem = getRemaining(payment);
+      return rem > 0 && rem < 4;
+    });
+
     return { highAttendancePending, paidPayments, lowAttendance };
   };
 
@@ -439,6 +446,7 @@ export default function AdminPaymentsPage() {
   return (
     <div className="min-h-screen bg-gray-100 pt-20">
       <div className="container mx-auto px-4 py-8">
+        
         {/* 헤더 */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-4">
@@ -573,7 +581,7 @@ export default function AdminPaymentsPage() {
                           disabled={loadingAttendance}
                           className="font-semibold text-green-600 hover:text-green-800 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {payment.remaining_attendance}회
+                          {getRemaining(payment)}회
                           {loadingAttendance && <span className="ml-1">...</span>}
                         </button>
                       </td>
@@ -720,6 +728,18 @@ export default function AdminPaymentsPage() {
           </div>
         )}
 
+        {/* 종료/비진행 수업 미결제 관리 */}
+        <div className="bg-white rounded-lg shadow mb-8">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-5 h-5 text-amber-500" />
+              <h2 className="text-xl font-semibold text-gray-900">종료/비진행 수업 미결제 관리</h2>
+            </div>
+            <button onClick={handleManualRefresh} className="text-sm text-blue-600 hover:text-blue-800">새로고침</button>
+          </div>
+          <NonContinuingPaymentsSection makeAuthenticatedRequest={makeAuthenticatedRequest} />
+        </div>
+
         {/* 4회 미만 출석 목록 (토글 가능) */}
         {lowAttendance.length > 0 && (
           <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -727,7 +747,7 @@ export default function AdminPaymentsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-700">
-                    4회 미만 출석 목록 (결제 완료 제외)
+                    4회 미만 출석 목록
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">
                     출석 횟수가 4회 미만이고 결제 완료되지 않은 수업입니다. ({lowAttendanceCounts.total}건)
@@ -815,7 +835,7 @@ export default function AdminPaymentsPage() {
                             disabled={loadingAttendance}
                             className="font-semibold text-orange-600 hover:text-orange-800 hover:underline cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {payment.remaining_attendance}회
+                            {getRemaining(payment)}회
                             {loadingAttendance && <span className="ml-1">...</span>}
                           </button>
                         </td>
@@ -859,7 +879,7 @@ export default function AdminPaymentsPage() {
                   <strong>{selectedPayment.student_name}</strong> - {selectedPayment.class_title}
                 </p>
                 <p className="text-sm text-gray-600">
-                  현재 출석 횟수: <span className="font-semibold text-green-600">{selectedPayment.remaining_attendance}회</span>
+                  현재 출석 횟수: <span className="font-semibold text-green-600">{getRemaining(selectedPayment)}회</span>
                 </p>
               </div>
 
@@ -870,19 +890,19 @@ export default function AdminPaymentsPage() {
                 <input
                   type="number"
                   min="1"
-                  max={selectedPayment.remaining_attendance}
+                  max={getRemaining(selectedPayment)}
                   value={paymentCount}
                   onChange={(e) => setPaymentCount(parseInt(e.target.value) || 1)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  최대 {selectedPayment.remaining_attendance}회까지 결제 가능
+                  최대 {getRemaining(selectedPayment)}회까지 결제 가능
                 </p>
               </div>
 
               <div className="mb-4 p-3 bg-blue-50 rounded-md">
                 <p className="text-sm text-blue-800">
-                  결제 후 남은 출석: <span className="font-semibold">{selectedPayment.remaining_attendance - paymentCount}회</span>
+                  결제 후 남은 출석: <span className="font-semibold">{Math.max(0, getRemaining(selectedPayment) - paymentCount)}회</span>
                 </p>
               </div>
 
@@ -999,21 +1019,26 @@ export default function AdminPaymentsPage() {
               <div className="bg-gray-50 rounded-lg p-4">
                 <h4 className="text-lg font-medium mb-4">상세 출석 기록</h4>
                 <div className="space-y-3">
-                  {attendanceHistory.attendanceRecords.map((record, index) => {
-                    // 결제 완료된 수업인지 확인 (class_paid 테이블에 기록이 있으면 결제 완료)
-                    const hasPaidRecords = attendanceHistory.payment?.paid_records && attendanceHistory.payment.paid_records.length > 0;
-                    const isHidden = record.is_hidden;
-                    
-                    // 결제 완료된 수업에서 숨겨진 기록이면 "결제 완료"로 표시
-                    const shouldShowAsPaid = hasPaidRecords && isHidden;
-                    
-                    // 미결제 태그 표시 조건: 결제 기록이 있고, 숨겨지지 않았으며, 출석인 경우만
-                    const shouldShowAsUnpaid = hasPaidRecords && !isHidden && record.status === 'present';
-                    
+                  {(() => {
+                    // 결제된 회수 기준으로 가장 이른 출석부터 결제 완료 매핑
+                    const paidCount = attendanceHistory.payment?.total_paid_amount || 0;
+                    const presentSortedAsc = [...attendanceHistory.attendanceRecords]
+                      .filter(r => r.status === 'present')
+                      .sort((a, b) => new Date(a.attendance_date) - new Date(b.attendance_date));
+                    const paidRecordIdsByQuota = new Set(presentSortedAsc.slice(0, paidCount).map(r => r.id));
+
+                    return attendanceHistory.attendanceRecords.map((record) => {
+                      const totalPaid = attendanceHistory.payment?.total_paid_amount || 0;
+                      const isHidden = record.is_hidden;
+                      const isPaidByQuota = paidRecordIdsByQuota.has(record.id);
+
+                      // 결제 완료 표시: 결제 회수 할당에 포함된 출석
+                      const shouldShowAsPaid = isPaidByQuota;
+                      // 미결제 태그는 결제가 0회일 때만 표시
+                      const shouldShowAsUnpaid = totalPaid === 0 && !isHidden && record.status === 'present';
+
                     return (
-                      <div key={record.id} className={`p-4 rounded-lg shadow-sm ${
-                        shouldShowAsPaid ? 'bg-green-50 border border-green-200' : 'bg-white'
-                      }`}>
+                      <div key={record.id} className={`p-4 rounded-lg shadow-sm ${shouldShowAsPaid ? 'bg-green-50 border border-green-200' : 'bg-white'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
                             <div className="text-sm font-medium text-gray-900">
@@ -1052,12 +1077,12 @@ export default function AdminPaymentsPage() {
                         )}
                         {shouldShowAsPaid && (
                           <div className="mt-2 text-sm text-green-600">
-                            <span className="font-medium">결제 완료로 인해 숨김 처리됨</span>
+                            <span className="font-medium">결제 완료 처리 분</span>
                           </div>
                         )}
                       </div>
                     );
-                  })}
+                  });})()}
                 </div>
               </div>
 
@@ -1090,3 +1115,76 @@ export default function AdminPaymentsPage() {
     </div>
   );
 } 
+
+function NonContinuingPaymentsSection({ makeAuthenticatedRequest }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const res = await makeAuthenticatedRequest('/api/admin/payments/non-continuing', { method: 'GET' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || '데이터 로드 실패');
+      setItems(Array.isArray(json.items) ? json.items : []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const pending = items.filter(i => (i.remaining_attendance ?? 0) > 0);
+
+  return (
+    <div>
+      {error && <div className="px-6 py-3 text-sm text-red-600">{error}</div>}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">학생</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">수업명</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">마지막 출석일</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">누적 출석</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">결제됨</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">남은 출석</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작업</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {loading ? (
+              <tr><td colSpan="7" className="px-6 py-6 text-center text-gray-500">불러오는 중…</td></tr>
+            ) : pending.length === 0 ? (
+              <tr><td colSpan="7" className="px-6 py-6 text-center text-gray-500">표시할 항목이 없습니다.</td></tr>
+            ) : pending.map(item => (
+              <tr key={item.id}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.student_name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.class_title}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.last_attendance_date ? new Date(item.last_attendance_date).toLocaleDateString('ko-KR') : '-'}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.attendance_count ?? 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.total_paid_amount ?? 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-amber-700">{item.remaining_attendance ?? 0}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  <button
+                    className="text-green-600 hover:text-green-900 bg-green-50 hover:bg-green-100 px-3 py-1 rounded"
+                    onClick={() => {
+                      // 기존 결제 모달 흐름 재사용: 남은 출석을 기본값으로 채우고 모달 오픈
+                      const count = Math.max(1, item.remaining_attendance || 1);
+                      // 단순히 페이지 상단 메시지로 안내
+                      alert(`${item.student_name} - ${item.class_title}: 남은 ${count}회 결제는 상단 목록에서 해당 학생 항목의 결제 버튼으로 진행해주세요.`);
+                    }}
+                  >결제 안내</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

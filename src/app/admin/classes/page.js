@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { DollarSign, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import { useRoom } from '@/app/contexts/RoomContext'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
@@ -300,6 +301,7 @@ export default function AdminClassesPage() {
     const diff = end - start
     return diff > 0 ? diff : undefined
   }
+  // (이전 임시 패널 제거)
 
   const daysKo = ['일', '월', '화', '수', '목', '금', '토']
   const buildTitle = (subject, dateStr, startTime) => {
@@ -673,6 +675,14 @@ export default function AdminClassesPage() {
   return (
     <div className="min-h-screen bg-gray-100 pt-20">
       <div className="container mx-auto px-4 py-8">
+        {/* 종료 수업 결제 관리 탭 */}
+        {isAdmin() && (
+          <div className="bg-white rounded-lg shadow mb-8">
+            <NonContinuingPaymentsPanel makeAuthenticatedRequest={makeAuthenticatedRequest} />
+          </div>
+        )}
+        {/* 탭: 활성 수업 / 종료(비진행) 결제 관리 */}
+        {/* 상단 불필요 참조 제거됨 - 하단 패널로 대체 */}
         {/* 헤더 */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-4">

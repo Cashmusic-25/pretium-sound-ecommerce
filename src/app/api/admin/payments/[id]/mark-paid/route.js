@@ -97,7 +97,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Failed to update payment record' }, { status: 500 });
     }
 
-    // 결제 완료 시 해당 학생의 출석 기록에서 가장 날짜가 빠른 것부터 결제된 횟수만큼 숨김 처리
+    // 결제 완료 시 해당 학생의 출석 기록에서 가장 날짜가 빠른 것부터(미결제 대상만) 결제된 횟수만큼 숨김 처리
     try {
       // 해당 학생의 출석 기록을 날짜순으로 조회 (가장 빠른 날짜부터)
       const { data: attendanceRecords, error: attendanceError } = await supabase
@@ -105,6 +105,8 @@ export async function POST(request, { params }) {
         .select('*')
         .eq('class_id', currentPayment.class_id)
         .eq('student_id', currentPayment.student_id)
+        .eq('status', 'present')
+        .eq('is_hidden', false)
         .order('attendance_date', { ascending: true }); // 날짜 오름차순 (가장 빠른 날짜부터)
 
       if (attendanceError) {
@@ -129,6 +131,13 @@ export async function POST(request, { params }) {
     } catch (hideError) {
       console.error('Error in attendance hiding process:', hideError);
       // 숨김 처리 중 오류가 발생해도 결제는 성공으로 처리
+    }
+
+    // 결제 상태 즉시 갱신 시도 (실패해도 전체 흐름에는 영향 주지 않음)
+    try {
+      await supabase.rpc('update_payment_status');
+    } catch (e) {
+      console.error('update_payment_status RPC failed (non-blocking):', e);
     }
 
     return NextResponse.json({
@@ -252,6 +261,8 @@ export async function DELETE(request, { params }) {
         .eq('class_id', currentPayment.class_id)
         .eq('student_id', currentPayment.student_id)
         .eq('is_hidden', true)
+        .eq('status', 'present')
+        .ilike('hidden_reason', '%결제 완료로 인한 숨김 처리%')
         .order('attendance_date', { ascending: true }); // 날짜 오름차순 (가장 빠른 날짜부터)
 
       if (hiddenError) {
@@ -275,6 +286,13 @@ export async function DELETE(request, { params }) {
     } catch (showError) {
       console.error('Error in attendance showing process:', showError);
       // 보이게 처리 중 오류가 발생해도 결제 취소는 성공으로 처리
+    }
+
+    // 결제 상태 즉시 갱신 시도 (실패해도 전체 흐름에는 영향 주지 않음)
+    try {
+      await supabase.rpc('update_payment_status');
+    } catch (e) {
+      console.error('update_payment_status RPC failed (non-blocking):', e);
     }
 
     return NextResponse.json({
