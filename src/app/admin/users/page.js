@@ -17,7 +17,9 @@ import {
   Star,
   Eye,
   MoreVertical,
-  X
+  X,
+  Trash2,
+  ShieldAlert
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import Header from '../../components/Header'
@@ -25,7 +27,7 @@ import Avatar from '../../components/Avatar'
 
 export default function AdminUsersPage() {
   const router = useRouter()
-  const { isAdmin, getAllUsers, updateUserStatus } = useAuth()
+  const { isAdmin, makeAuthenticatedRequest } = useAuth()
   const [users, setUsers] = useState([])
   const [filteredUsers, setFilteredUsers] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -33,6 +35,7 @@ export default function AdminUsersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) {
@@ -100,6 +103,47 @@ export default function AdminUsersPage() {
       setFilteredUsers([])
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleChangeRole = async (userId, currentRole) => {
+    try {
+      const nextRole = currentRole === 'admin' ? 'user' : 'admin'
+      if (!confirm(`이 사용자의 역할을 '${nextRole}'(으)로 변경할까요?`)) return
+      setActionLoading(true)
+      const res = await makeAuthenticatedRequest('/api/admin/users/change-role', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId: userId, role: nextRole })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '역할 변경 실패')
+      await loadUsers()
+      alert('역할이 변경되었습니다.')
+    } catch (e) {
+      console.error(e)
+      alert(e.message || '오류가 발생했습니다.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleDeleteUser = async (userId) => {
+    try {
+      if (!confirm('정말로 이 사용자를 삭제하시겠습니까? 되돌릴 수 없습니다.')) return
+      setActionLoading(true)
+      const res = await makeAuthenticatedRequest('/api/admin/users/delete', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId: userId })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '사용자 삭제 실패')
+      await loadUsers()
+      alert('사용자가 삭제되었습니다.')
+    } catch (e) {
+      console.error(e)
+      alert(e.message || '오류가 발생했습니다.')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -384,16 +428,34 @@ export default function AdminUsersPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => {
-                                setSelectedUser(user)
-                                setShowDetailModal(true)
-                              }}
-                              className="text-gray-600 hover:text-indigo-600 transition-colors p-2"
-                              title="상세 보기"
-                            >
-                              <Eye size={16} />
-                            </button>
+                            <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedUser(user)
+                                  setShowDetailModal(true)
+                                }}
+                                className="text-gray-600 hover:text-indigo-600 transition-colors p-2"
+                                title="상세 보기"
+                              >
+                                <Eye size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleChangeRole(user.id, user.role)}
+                                disabled={actionLoading}
+                                className="text-purple-600 hover:text-purple-800 transition-colors p-2 disabled:opacity-50"
+                                title="역할 변경"
+                              >
+                                <ShieldAlert size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                disabled={actionLoading}
+                                className="text-red-600 hover:text-red-800 transition-colors p-2 disabled:opacity-50"
+                                title="사용자 삭제"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       )

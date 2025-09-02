@@ -1,6 +1,8 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   BarChart3, 
@@ -15,27 +17,67 @@ import {
 } from 'lucide-react';
 
 export default function SalesStatistics() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [salesData, setSalesData] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('30days');
+  const [periodKind, setPeriodKind] = useState('month'); // month | quarter
+  const [periodValue, setPeriodValue] = useState(''); // e.g., 2025-12 or 2025-Q4
   const [sortBy, setSortBy] = useState('revenue');
   const [sortOrder, setSortOrder] = useState('desc');
-  
-  const { makeAuthenticatedRequest } = useAuth();
+  const [filtersReady, setFiltersReady] = useState(false);
+
+  const { makeAuthenticatedRequest, isAuthenticated, isAdmin, supabaseReady } = useAuth();
 
   useEffect(() => {
+    // Supabase 준비/인증/관리자 권한 확인 후 호출
+    if (!supabaseReady) return;
+    if (!isAuthenticated) {
+      setError('로그인이 필요합니다');
+      router.push('/');
+      return;
+    }
+    if (!isAdmin) {
+      setError('관리자 권한이 필요합니다');
+      router.push('/');
+      return;
+    }
+    if (!filtersReady) return;
     fetchSalesStatistics();
-  }, [timeRange, sortBy, sortOrder]);
+  }, [timeRange, sortBy, sortOrder, isAuthenticated, isAdmin, supabaseReady, filtersReady, router]);
+
+  // 초기 로딩 시 URL 쿼리에서 필터 복원
+  useEffect(() => {
+    try {
+      const spPeriod = searchParams?.get('period');
+      const spSortBy = searchParams?.get('sortBy');
+      const spSortOrder = searchParams?.get('sortOrder');
+
+      if (spPeriod && spPeriod.includes(':')) {
+        const [k, v] = spPeriod.split(':');
+        if ((k === 'month' && /^\d{4}-\d{2}$/.test(v)) || (k === 'quarter' && /^\d{4}-Q[1-4]$/.test(v))) {
+          setPeriodKind(k);
+          setPeriodValue(v);
+        }
+      }
+      if (spSortBy && ['revenue','quantity','orders','title'].includes(spSortBy)) setSortBy(spSortBy);
+      if (spSortOrder && ['asc','desc'].includes(spSortOrder)) setSortOrder(spSortOrder);
+    } catch {}
+    setFiltersReady(true);
+  }, [searchParams]);
 
   const fetchSalesStatistics = async () => {
     try {
       setLoading(true);
       setError(null);
 
+      const isValidPeriod = !!periodValue && ((periodKind === 'month' && /^\d{4}-\d{2}$/.test(periodValue)) || (periodKind === 'quarter' && /^\d{4}-Q[1-4]$/.test(periodValue)));
+      const periodParam = isValidPeriod ? `&period=${encodeURIComponent(`${periodKind}:${periodValue}`)}` : '';
       const response = await makeAuthenticatedRequest(
-        `/api/admin/sales-statistics?timeRange=${timeRange}&sortBy=${sortBy}&sortOrder=${sortOrder}`
+        `/api/admin/sales-statistics?timeRange=${timeRange}&sortBy=${sortBy}&sortOrder=${sortOrder}${periodParam}`
       );
 
       if (response.ok) {
@@ -73,6 +115,11 @@ export default function SalesStatistics() {
     return labels[range] || '최근 30일';
   };
 
+  const months = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => (thisYear - i).toString());
+  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+
   const getSortLabel = (sort) => {
     const labels = {
       'revenue': '매출액',
@@ -105,6 +152,27 @@ export default function SalesStatistics() {
     link.href = URL.createObjectURL(blob);
     link.download = `교재별_매출통계_${getTimeRangeLabel(timeRange)}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
+  };
+
+  const isValidPeriod = !!periodValue && (
+    (periodKind === 'month' && /^\d{4}-\d{2}$/.test(periodValue)) ||
+    (periodKind === 'quarter' && /^\d{4}-Q[1-4]$/.test(periodValue))
+  );
+
+  const applyFilters = async () => {
+    try {
+      // URL에 선택값 반영 (유지용)
+      const params = new URLSearchParams();
+      if (isValidPeriod) params.set('period', `${periodKind}:${periodValue}`);
+      if (sortBy) params.set('sortBy', sortBy);
+      if (sortOrder) params.set('sortOrder', sortOrder);
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?');
+      // 데이터 갱신
+      await fetchSalesStatistics();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (loading) {
@@ -174,19 +242,81 @@ export default function SalesStatistics() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               <Calendar size={16} className="inline mr-1" />
-              기간 선택
+              기간 선택 (월/분기)
             </label>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value="7days">최근 7일</option>
-              <option value="30days">최근 30일</option>
-              <option value="90days">최근 90일</option>
-              <option value="1year">최근 1년</option>
-              <option value="all">전체 기간</option>
-            </select>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <select
+                value={periodKind}
+                onChange={(e) => { setPeriodKind(e.target.value); setPeriodValue(''); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="month">월</option>
+                <option value="quarter">분기</option>
+              </select>
+
+              {periodKind === 'month' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    onChange={(e) => {
+                      const y = e.target.value;
+                      setPeriodValue(y && periodValue ? `${y}-${periodValue.split('-')[1] || ''}` : y ? `${y}-` : '');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    value={periodValue.split('-')[0] || ''}
+                  >
+                    <option value="" disabled>연도</option>
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      const m = e.target.value;
+                      const y = (periodValue.split('-')[0] || '');
+                      setPeriodValue(y ? `${y}-${m}` : `-${m}`);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    value={periodValue.split('-')[1] || ''}
+                  >
+                    <option value="" disabled>월</option>
+                    {months.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    onChange={(e) => {
+                      const y = e.target.value;
+                      setPeriodValue(y && periodValue ? `${y}-${periodValue.split('-')[1] || ''}` : y ? `${y}-` : '');
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    value={periodValue.split('-')[0] || ''}
+                  >
+                    <option value="" disabled>연도</option>
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      const q = e.target.value; // Q1..Q4
+                      const y = (periodValue.split('-')[0] || '');
+                      setPeriodValue(y ? `${y}-${q}` : `-${q}`);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    value={periodValue.split('-')[1] || ''}
+                  >
+                    <option value="" disabled>분기</option>
+                    {quarters.map(q => <option key={q} value={q}>{q}</option>)}
+                  </select>
+                </div>
+              )}
+            <div className="mt-3">
+              <button
+                onClick={applyFilters}
+                disabled={!isValidPeriod}
+                className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50"
+              >
+                적용하기
+              </button>
+            </div>
+            </div>
           </div>
 
           <div>
@@ -222,9 +352,8 @@ export default function SalesStatistics() {
         </div>
       </div>
 
-      {/* 요약 통계 */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      {/* 요약 통계 (데이터 없을 때도 0으로 표시) */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex items-center">
               <div className="bg-blue-100 p-3 rounded-full mr-4">
@@ -233,7 +362,7 @@ export default function SalesStatistics() {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 매출액</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPrice(summary.totalRevenue)}원
+                  {formatPrice((summary?.totalRevenue) || 0)}원
                 </p>
               </div>
             </div>
@@ -247,7 +376,7 @@ export default function SalesStatistics() {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 판매량</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPrice(summary.totalQuantity)}개
+                  {formatPrice((summary?.totalQuantity) || 0)}개
                 </p>
               </div>
             </div>
@@ -261,7 +390,7 @@ export default function SalesStatistics() {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 주문수</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPrice(summary.totalOrders)}건
+                  {formatPrice((summary?.totalOrders) || 0)}건
                 </p>
               </div>
             </div>
@@ -275,13 +404,12 @@ export default function SalesStatistics() {
               <div>
                 <p className="text-sm font-medium text-gray-600">평균 주문액</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatPrice(summary.averageOrderValue)}원
+                  {formatPrice((summary?.averageOrderValue) || 0)}원
                 </p>
               </div>
             </div>
           </div>
-        </div>
-      )}
+      </div>
 
       {/* 교재별 상세 통계 테이블 */}
       <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -292,6 +420,9 @@ export default function SalesStatistics() {
             </h3>
             <p className="text-sm text-gray-600">
               총 {salesData.length}개 상품 • {getSortLabel(sortBy)} 기준 정렬
+              {periodValue && (
+                <span className="ml-2 text-gray-500">(기간: {periodKind === 'month' ? periodValue.replace('-', '년 ') + '월' : periodValue.replace('-', '년 ')})</span>
+              )}
             </p>
           </div>
         </div>

@@ -15,64 +15,11 @@ const KakaoPayLogo = ({ size = 20 }) => (
   />
 );
 
-// 신용카드 아이콘
-const CreditCardIcon = ({ size = 20 }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className="inline-block"
-  >
-    <rect x="2" y="6" width="20" height="12" rx="2" stroke="#666" strokeWidth="1.5" fill="none"/>
-    <path d="M2 10h20" stroke="#666" strokeWidth="1.5"/>
-    <rect x="5" y="13" width="4" height="2" rx="1" fill="#666"/>
-  </svg>
-);
-
-// 계좌이체 아이콘
-const BankIcon = ({ size = 20 }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className="inline-block"
-  >
-    <path d="M2 20h20v2H2v-2zM3.5 18h17l-2-8H5.5l-2 8zM12 2L2 8h20L12 2z" fill="#666"/>
-    <rect x="6" y="11" width="2" height="5" fill="white"/>
-    <rect x="11" y="11" width="2" height="5" fill="white"/>
-    <rect x="16" y="11" width="2" height="5" fill="white"/>
-  </svg>
-);
-
-// 가상계좌 아이콘
-const VirtualAccountIcon = ({ size = 20 }) => (
-  <svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    xmlns="http://www.w3.org/2000/svg"
-    className="inline-block"
-  >
-    <rect x="3" y="6" width="18" height="12" rx="2" stroke="#666" strokeWidth="1.5" fill="none"/>
-    <path d="M7 10h10M7 14h6" stroke="#666" strokeWidth="1.5" strokeLinecap="round"/>
-    <circle cx="16" cy="14" r="1" fill="#666"/>
-  </svg>
-);
+// 다른 결제 수단 아이콘 제거
 
 export default function CheckoutPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('kakaopay'); // 기본값: 카카오페이
-  const [shippingInfo, setShippingInfo] = useState({
-    name: '',
-    phone: '',
-    address: '',
-    detailAddress: ''
-  });
+  const [paymentMethod] = useState('kakaopay'); // 카카오페이 고정
   
   const { items: cart = [], getTotalPrice, clearCart } = useCart();
   const { user, makeAuthenticatedRequest } = useAuth();
@@ -100,7 +47,7 @@ export default function CheckoutPage() {
     });
   };
 
-  const getPaymentConfig = (method, orderId, amount, cleanPhone) => {
+  const getPaymentConfig = (orderId, amount, customer) => {
     // V2 설정 - 정리된 전화번호 사용
     const baseConfig = {
       storeId: "store-cbb15c93-473c-4064-ab10-f36d17fd0895",
@@ -110,46 +57,14 @@ export default function CheckoutPage() {
         : cart[0].title,
       totalAmount: amount,
       currency: "KRW",
-      customer: {
-        fullName: shippingInfo.name.trim(),
-        phoneNumber: cleanPhone,
-        email: user.email,
-      },
+      customer,
       redirectUrl: `${window.location.origin}/order/complete?orderId=${orderId}`,
     };
-
-    switch(method) {
-      case 'kakaopay':
-        return {
-          ...baseConfig,
-          channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "EASY_PAY",
-        };
-      case 'card':
-        return {
-          ...baseConfig,
-          channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "CARD",
-        };
-      case 'transfer':
-        return {
-          ...baseConfig,
-          channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "TRANSFER",
-        };
-      case 'vbank':
-        return {
-          ...baseConfig,
-          channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "VIRTUAL_ACCOUNT",
-        };
-      default:
-        return {
-          ...baseConfig,
-          channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
-          payMethod: "EASY_PAY",
-        };
-    }
+    return {
+      ...baseConfig,
+      channelKey: process.env.NEXT_PUBLIC_PORTONE_CHANNEL_KEY,
+      payMethod: "EASY_PAY",
+    };
   };
 
   const handlePayment = async () => {
@@ -158,28 +73,12 @@ export default function CheckoutPage() {
       return;
     }
 
-    // 필수 입력값 검증
-    if (!shippingInfo.name.trim()) {
-      alert('수령인을 입력해주세요.');
-      return;
-    }
-
-    if (!shippingInfo.phone.trim()) {
-      alert('연락처를 입력해주세요.');
-      return;
-    }
-
-    // 전화번호 형식 검증 및 정리
-    const cleanPhone = shippingInfo.phone.replace(/[^0-9]/g, '');
-    if (cleanPhone.length < 10 || cleanPhone.length > 11) {
-      alert('올바른 전화번호 형식을 입력해주세요. (예: 010-1234-5678)');
-      return;
-    }
-
-    if (!shippingInfo.address.trim()) {
-      alert('주소를 입력해주세요.');
-      return;
-    }
+    // 배송 정보 제거: 고객 정보는 사용자 메타데이터로 대체
+    const customer = {
+      fullName: user.user_metadata?.name || user.email?.split('@')[0] || '고객',
+      email: user.email,
+      // phoneNumber 생략 (undefined는 JSON에서 제거됨)
+    };
     
     setIsLoading(true);
     
@@ -190,59 +89,12 @@ export default function CheckoutPage() {
       
       console.log('V2 결제 시도 - 금액:', amount, '장바구니:', cart, '결제방법:', paymentMethod);
 
-      // ✅ 서버에 주문 정보 사전 등록 - 인증된 요청으로 변경
-      console.log('📦 주문 생성 요청 데이터:', {
-        orderId,
-        userId: user.id,
-        items: cart,
-        totalAmount: amount,
-        shippingAddress: shippingInfo,
-        status: 'pending'
-      });
-
-      const orderResponse = await makeAuthenticatedRequest('/api/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId,
-          userId: user.id,
-          items: cart,
-          totalAmount: amount,
-          shippingAddress: shippingInfo,
-          status: 'pending'
-        }),
-      });
-
-      console.log('📦 주문 응답 상태:', orderResponse.status);
-      console.log('📦 주문 응답 헤더:', Object.fromEntries(orderResponse.headers.entries()));
-
-      let orderResult;
-      try {
-        orderResult = await orderResponse.json();
-        console.log('📦 주문 응답 데이터:', orderResult);
-      } catch (jsonError) {
-        console.error('❌ JSON 파싱 실패:', jsonError);
-        const responseText = await orderResponse.text();
-        console.error('❌ 실제 응답 내용:', responseText);
-        throw new Error(`서버 응답을 해석할 수 없습니다: ${responseText.slice(0, 200)}`);
-      }
-
-      if (!orderResponse.ok) {
-        console.error('❌ 주문 생성 실패 상세:', {
-          status: orderResponse.status,
-          statusText: orderResponse.statusText,
-          result: orderResult
-        });
-        throw new Error(orderResult?.error || orderResult?.message || `주문 생성 실패 (${orderResponse.status})`);
-      }
-
-      console.log('✅ 주문 생성 성공:', orderResult);
-
       // 포트원 V2 스크립트 로드 대기
       await waitForPortOne();
 
       // V2 방식 결제 요청
       if (typeof window !== 'undefined' && window.PortOne) {
-        const paymentConfig = getPaymentConfig(paymentMethod, orderId, amount, cleanPhone);
+        const paymentConfig = getPaymentConfig(orderId, amount, customer);
         
         console.log('V2 결제 설정:', paymentConfig);
         
@@ -257,7 +109,7 @@ export default function CheckoutPage() {
           setIsLoading(false);
         } else {
           // 결제 성공
-          handlePaymentSuccess(response.paymentId, orderId);
+          handlePaymentSuccess(response.paymentId, orderId, amount, cart, user.id);
         }
       } else {
         alert('결제 모듈을 로드할 수 없습니다.');
@@ -278,7 +130,7 @@ export default function CheckoutPage() {
     }
   };
 
-  const handlePaymentSuccess = async (paymentId, merchantUid) => {
+  const handlePaymentSuccess = async (paymentId, merchantUid, amountValue, itemsValue, userIdValue) => {
     try {
       console.log('V2 결제 성공 처리 시작:', { paymentId, merchantUid });
       
@@ -288,6 +140,9 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           paymentId: paymentId,
           orderId: merchantUid,
+          items: itemsValue,
+          totalAmount: amountValue,
+          userId: userIdValue,
         }),
       });
 
@@ -402,130 +257,16 @@ export default function CheckoutPage() {
 
         {/* 배송 정보 */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">배송 정보</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                수령인 *
-              </label>
-              <input
-                type="text"
-                value={shippingInfo.name}
-                onChange={(e) => setShippingInfo({...shippingInfo, name: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="이름을 입력하세요"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                연락처 *
-              </label>
-              <input
-                type="tel"
-                value={shippingInfo.phone}
-                onChange={(e) => setShippingInfo({...shippingInfo, phone: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="010-0000-0000"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                주소 *
-              </label>
-              <input
-                type="text"
-                value={shippingInfo.address}
-                onChange={(e) => setShippingInfo({...shippingInfo, address: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="기본 주소"
-                required
-              />
-              <input
-                type="text"
-                value={shippingInfo.detailAddress}
-                onChange={(e) => setShippingInfo({...shippingInfo, detailAddress: e.target.value})}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mt-2"
-                placeholder="상세 주소"
-              />
-            </div>
-          </div>
-
-          {/* 결제 방법 선택 */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-3">결제 방법</h3>
-            <div className="space-y-3">
-              {/* 카카오페이 옵션 */}
-              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                <input 
-                  type="radio" 
-                  name="payMethod" 
-                  value="kakaopay"
-                  checked={paymentMethod === 'kakaopay'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-3" 
-                />
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center">
-                    <KakaoPayLogo size={24} />
-                    <span className="ml-2 font-medium">카카오페이</span>
-                  </div>
-                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-medium">
-                    추천
-                  </span>
-                </div>
-              </label>
-
-              {/* 신용카드 옵션 */}
-              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                <input 
-                  type="radio" 
-                  name="payMethod" 
-                  value="card"
-                  checked={paymentMethod === 'card'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-3" 
-                />
-                <div className="flex items-center">
-                  <CreditCardIcon size={24} />
-                  <span className="ml-2">신용/체크카드</span>
-                </div>
-              </label>
-
-              {/* 계좌이체 옵션 */}
-              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                <input 
-                  type="radio" 
-                  name="payMethod" 
-                  value="transfer"
-                  checked={paymentMethod === 'transfer'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-3" 
-                />
-                <div className="flex items-center">
-                  <BankIcon size={24} />
-                  <span className="ml-2">실시간 계좌이체</span>
-                </div>
-              </label>
-
-              {/* 가상계좌 옵션 */}
-              <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                <input 
-                  type="radio" 
-                  name="payMethod" 
-                  value="vbank"
-                  checked={paymentMethod === 'vbank'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="mr-3" 
-                />
-                <div className="flex items-center">
-                  <VirtualAccountIcon size={24} />
-                  <span className="ml-2">가상계좌</span>
-                </div>
-              </label>
+          <h2 className="text-xl font-semibold mb-4">결제 방법</h2>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
+              <div className="flex items-center">
+                <KakaoPayLogo size={24} />
+                <span className="ml-2 font-medium">카카오페이</span>
+              </div>
+              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-medium">
+                기본 결제수단
+              </span>
             </div>
           </div>
 
@@ -547,12 +288,8 @@ export default function CheckoutPage() {
           {/* 결제 버튼 */}
           <button
             onClick={handlePayment}
-            disabled={isLoading || !shippingInfo.name || !shippingInfo.phone || !shippingInfo.address}
-            className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
-              paymentMethod === 'kakaopay' 
-                ? 'bg-yellow-400 hover:bg-yellow-500 text-black' 
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+            disabled={isLoading}
+            className="w-full py-3 px-4 rounded-md font-semibold transition-colors bg-yellow-400 hover:bg-yellow-500 text-black disabled:bg-gray-400 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <span className="flex items-center justify-center">
@@ -564,13 +301,8 @@ export default function CheckoutPage() {
               </span>
             ) : (
               <span className="flex items-center justify-center">
-                {paymentMethod === 'kakaopay' && <KakaoPayLogo size={20} />}
-                <span className={paymentMethod === 'kakaopay' ? 'ml-2' : ''}>
-                  {paymentMethod === 'kakaopay' ? 
-                    `카카오페이로 ${getTotalPrice().toLocaleString()}원 결제` :
-                    `${getTotalPrice().toLocaleString()}원 결제하기`
-                  }
-                </span>
+                <KakaoPayLogo size={20} />
+                <span className="ml-2">{`카카오페이로 ${getTotalPrice().toLocaleString()}원 결제`}</span>
               </span>
             )}
           </button>

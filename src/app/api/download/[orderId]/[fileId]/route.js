@@ -94,7 +94,7 @@ export async function GET(request, { params }) {
         console.log(`📁 상품 ${item.id} 파일 목록:`, product.files.map(f => f.id));
         
         // 파일 배열에서 해당 파일 찾기
-        const file = product.files.find(f => f.id === fileId);
+        const file = product.files.find(f => String(f.id) === String(fileId));
         if (file) {
           targetFile = file;
           productFound = true;
@@ -115,16 +115,54 @@ export async function GET(request, { params }) {
     await recordDownloadHistory(supabaseAdmin, user.id, orderId, fileId, targetFile.filename);
 
     // 8. Supabase Storage에서 signed URL 생성 (Service Role 필요)
-    console.log('☁️ Signed URL 생성 중:', targetFile.filePath);
-    
-    const { data: signedUrlData, error: signedUrlError } = await supabaseAdmin.storage
-      .from('ebooks')
-      .createSignedUrl(targetFile.filePath, 3600); // 1시간 = 3600초
+    const originalPathCandidate = targetFile.filePath || targetFile.path || '';
+    let derivedFromUrl = null;
+    if (targetFile.url && typeof targetFile.url === 'string') {
+      const m = targetFile.url.match(/\/storage\/v1\/object\/public\/ebooks\/(.+)$/);
+      if (m && m[1]) {
+        derivedFromUrl = m[1];
+      }
+    }
 
-    if (signedUrlError) {
-      console.error('❌ Signed URL 생성 실패:', signedUrlError);
+    const original = String(originalPathCandidate || derivedFromUrl || '').trim();
+    console.log('☁️ Signed URL 생성 중 (원본 경로 후보):', { originalPathCandidate, derivedFromUrl, chosen: original });
+
+    if (!original) {
       return NextResponse.json({ 
-        error: '다운로드 링크 생성에 실패했습니다: ' + signedUrlError.message 
+        error: '파일 경로가 등록되어 있지 않습니다. 관리자에게 문의해주세요.'
+      }, { status: 500 });
+    }
+
+    const candidatePaths = new Set([ original ]);
+    if (original.startsWith('ebooks/')) {
+      candidatePaths.add(original.replace(/^ebooks\//, ''));
+    }
+    if (original.startsWith('/')) {
+      candidatePaths.add(original.replace(/^\//, ''));
+    }
+    // 이중 접두어 방지: ebooks/ebooks/* 형태일 경우 한 번 제거
+    if (original.startsWith('ebooks/ebooks/')) {
+      candidatePaths.add(original.replace(/^ebooks\//, ''));
+    }
+
+    let signedUrlData = null;
+    let lastError = null;
+    for (const path of candidatePaths) {
+      console.log('☁️ Signed URL 시도 경로:', path);
+      const { data, error } = await supabaseAdmin.storage
+        .from('ebooks')
+        .createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) {
+        signedUrlData = data;
+        break;
+      }
+      lastError = error;
+    }
+
+    if (!signedUrlData) {
+      console.error('❌ Signed URL 생성 실패 (모든 경로 시도):', lastError);
+      return NextResponse.json({ 
+        error: '다운로드 링크 생성에 실패했습니다: ' + (lastError?.message || 'Object not found') 
       }, { status: 500 });
     }
 

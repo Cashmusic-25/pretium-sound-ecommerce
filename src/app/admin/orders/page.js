@@ -9,37 +9,24 @@ import {
   RefreshCw,
   ArrowLeft,
   Package,
-  Truck,
-  CheckCircle,
-  Clock,
   X,
-  Eye,
-  Edit
+  Eye
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import Header from '../../components/Header'
 
 const ORDER_STATUS = {
-  PENDING: 'pending',
   PROCESSING: 'processing', 
-  SHIPPED: 'shipped',
-  DELIVERED: 'delivered',
   CANCELLED: 'cancelled'
 }
 
 const STATUS_LABELS = {
-  [ORDER_STATUS.PENDING]: '결제 대기',
-  [ORDER_STATUS.PROCESSING]: '처리 중',
-  [ORDER_STATUS.SHIPPED]: '배송 중', 
-  [ORDER_STATUS.DELIVERED]: '배송 완료',
+  [ORDER_STATUS.PROCESSING]: '결제 완료',
   [ORDER_STATUS.CANCELLED]: '취소됨'
 }
 
 const STATUS_COLORS = {
-  [ORDER_STATUS.PENDING]: 'bg-yellow-100 text-yellow-800',
   [ORDER_STATUS.PROCESSING]: 'bg-blue-100 text-blue-800',
-  [ORDER_STATUS.SHIPPED]: 'bg-purple-100 text-purple-800',
-  [ORDER_STATUS.DELIVERED]: 'bg-green-100 text-green-800',
   [ORDER_STATUS.CANCELLED]: 'bg-red-100 text-red-800'
 }
 
@@ -213,10 +200,7 @@ export default function AdminOrdersPage() {
 
   const getStatusIcon = (status) => {
     const icons = {
-      [ORDER_STATUS.PENDING]: <Clock size={16} />,
       [ORDER_STATUS.PROCESSING]: <Package size={16} />,
-      [ORDER_STATUS.SHIPPED]: <Truck size={16} />,
-      [ORDER_STATUS.DELIVERED]: <CheckCircle size={16} />,
       [ORDER_STATUS.CANCELLED]: <X size={16} />
     }
     return icons[status] || <Package size={16} />
@@ -225,10 +209,7 @@ export default function AdminOrdersPage() {
   const getOrderStats = () => {
     const stats = {
       total: orders.length,
-      pending: orders.filter(o => o.status === ORDER_STATUS.PENDING).length,
       processing: orders.filter(o => o.status === ORDER_STATUS.PROCESSING).length,
-      shipped: orders.filter(o => o.status === ORDER_STATUS.SHIPPED).length,
-      delivered: orders.filter(o => o.status === ORDER_STATUS.DELIVERED).length,
       cancelled: orders.filter(o => o.status === ORDER_STATUS.CANCELLED).length
     }
     return stats
@@ -272,7 +253,7 @@ export default function AdminOrdersPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-800">주문 관리</h1>
-                <p className="text-gray-600 mt-2">고객 주문을 관리하고 배송 상태를 업데이트하세요</p>
+                <p className="text-gray-600 mt-2">E-book 주문의 상태를 관리하세요 (결제완료/취소)</p>
               </div>
               
               <button
@@ -286,26 +267,14 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* 통계 카드 */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white rounded-xl shadow-lg p-4 text-center">
               <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
               <p className="text-sm text-gray-600">전체</p>
             </div>
             <div className="bg-white rounded-xl shadow-lg p-4 text-center">
-              <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-              <p className="text-sm text-gray-600">결제 대기</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-4 text-center">
               <p className="text-2xl font-bold text-blue-600">{stats.processing}</p>
-              <p className="text-sm text-gray-600">처리 중</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-4 text-center">
-              <p className="text-2xl font-bold text-purple-600">{stats.shipped}</p>
-              <p className="text-sm text-gray-600">배송 중</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-lg p-4 text-center">
-              <p className="text-2xl font-bold text-green-600">{stats.delivered}</p>
-              <p className="text-sm text-gray-600">배송 완료</p>
+              <p className="text-sm text-gray-600">결제 완료</p>
             </div>
             <div className="bg-white rounded-xl shadow-lg p-4 text-center">
               <p className="text-2xl font-bold text-red-600">{stats.cancelled}</p>
@@ -445,37 +414,7 @@ export default function AdminOrdersPage() {
                               <Eye size={16} />
                             </button>
                             
-                            {/* 상태 변경 드롭다운 - 클릭 기반으로 수정 */}
-                            <div className="relative">
-                              <button
-                                onClick={() => {
-                                  setSelectedOrder(order)
-                                  // 다음 상태로 자동 진행하는 버튼
-                                  const statusFlow = {
-                                    [ORDER_STATUS.PENDING]: ORDER_STATUS.PROCESSING,
-                                    [ORDER_STATUS.PROCESSING]: ORDER_STATUS.SHIPPED,
-                                    [ORDER_STATUS.SHIPPED]: ORDER_STATUS.DELIVERED,
-                                    [ORDER_STATUS.DELIVERED]: ORDER_STATUS.DELIVERED, // 이미 완료
-                                    [ORDER_STATUS.CANCELLED]: ORDER_STATUS.CANCELLED // 취소된 건 변경 불가
-                                  }
-                                  const nextStatus = statusFlow[order.status]
-                                  if (nextStatus && nextStatus !== order.status) {
-                                    handleStatusChange(order, nextStatus)
-                                  }
-                                }}
-                                className="text-gray-600 hover:text-indigo-600 transition-colors p-2"
-                                title={
-                                  order.status === ORDER_STATUS.PENDING ? "처리 중으로 변경" :
-                                  order.status === ORDER_STATUS.PROCESSING ? "배송 중으로 변경" :
-                                  order.status === ORDER_STATUS.SHIPPED ? "배송 완료로 변경" :
-                                  order.status === ORDER_STATUS.DELIVERED ? "이미 완료됨" :
-                                  "변경 불가"
-                                }
-                                disabled={order.status === ORDER_STATUS.DELIVERED || order.status === ORDER_STATUS.CANCELLED}
-                              >
-                                <Edit size={16} />
-                              </button>
-                            </div>
+                            {/* 상태 변경: 모달에서 결제완료/취소만 선택 */}
                             
                             {/* 모든 상태 선택 버튼 추가 */}
                             <div className="relative">
@@ -487,7 +426,7 @@ export default function AdminOrdersPage() {
                                   setShowStatusModal(true)
                                 }}
                                 className="text-gray-600 hover:text-green-600 transition-colors p-2 text-xs bg-gray-100 rounded px-2 py-1"
-                                title="상태 직접 선택"
+                                title="상태 변경"
                               >
                                 상태변경
                               </button>
@@ -667,7 +606,7 @@ export default function AdminOrdersPage() {
             <div className="space-y-2 mb-6">
               <p className="text-sm font-medium text-gray-700">변경할 상태를 선택하세요:</p>
               <div className="grid grid-cols-1 gap-2">
-                {Object.entries(STATUS_LABELS).map(([status, label]) => (
+                {(['processing', 'cancelled']).map((status) => (
                   <button
                     key={status}
                     onClick={() => setNewStatus(status)}
@@ -678,7 +617,7 @@ export default function AdminOrdersPage() {
                     }`}
                   >
                     {getStatusIcon(status)}
-                    <span className="font-medium">{label}</span>
+                    <span className="font-medium">{STATUS_LABELS[status]}</span>
                   </button>
                 ))}
               </div>

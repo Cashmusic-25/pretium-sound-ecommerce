@@ -1,18 +1,5 @@
 export default function Footer() {
-  const footerSections = [
-    {
-      title: "음악 교재 카테고리",
-      links: ["피아노", "기타", "드럼", "보컬", "바이올린", "음악 이론"]
-    },
-    {
-      title: "고객 지원",
-      links: ["자주 묻는 질문", "배송 안내", "반품/교환", "1:1 문의"]
-    },
-    {
-      title: "서비스 안내",
-      links: ["이용약관", "개인정보처리방침", "서비스 제공 기간", "다운로드 가이드"]
-    }
-  ]
+  
 
   return (
     <footer id="contact" className="text-white py-16 mt-16 border-t border-gray-800" style={{backgroundColor: '#262627'}}>
@@ -45,27 +32,7 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-          {footerSections.map((section, index) => (
-            <div key={index}>
-              <h3 className="text-lg font-bold mb-4 text-white">
-                {section.title}
-              </h3>
-              <ul className="space-y-2">
-                {section.links.map((link, linkIndex) => (
-                  <li key={linkIndex}>
-                    <a
-                      href="#"
-                      className="text-gray-300 hover:text-blue-400 transition-colors duration-200"
-                    >
-                      {link}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+        
         
         <div className="border-t border-gray-800 pt-8">
           <div className="text-2xl font-bold gradient-text mb-6 text-center">

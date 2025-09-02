@@ -45,4 +45,4 @@ export const isSupabaseReady = () => {
   return supabaseUrl && supabaseKey
 }
 
-console.log('🔧 Supabase 클라이언트 초기화:', isSupabaseReady() ? '성공' : '실패')
+// console.debug('Supabase 클라이언트 초기화:', isSupabaseReady() ? '성공' : '실패')

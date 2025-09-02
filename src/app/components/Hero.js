@@ -34,38 +34,26 @@ export default function Hero() {
     const fetchHeroSlides = async () => {
       try {
         setIsLoading(true)
-        console.log('🔄 히어로 슬라이더 데이터 로딩 시작...')
 
         const response = await fetch('/api/hero-slides')
-        console.log('📡 API 응답 상태:', response.status, response.statusText)
         
         const result = await response.json()
-        console.log('📦 API 응답 데이터:', result)
 
         if (!response.ok) {
-          console.error('❌ API 응답 오류:', result)
           throw new Error(result.error || '데이터 로딩 실패')
         }
-
-        console.log('✅ 히어로 슬라이더 데이터 로딩 완료:', result.slides?.length || 0, '개')
-        console.log('📋 슬라이드 상세 데이터:', result.slides)
         
         setAllSlides(result.slides || [])
 
         if (!result.slides || result.slides.length === 0) {
-          console.log('📝 히어로 슬라이드 데이터가 없습니다')
           setAllSlides([])
-        } else {
-          console.log('🎯 각 슬라이드 ID 확인:', result.slides.map(slide => `ID: ${slide.id}, 제목: ${slide.title}`))
         }
 
       } catch (err) {
         console.error('❌ 히어로 슬라이더 데이터 로딩 실패:', err)
-        console.error('❌ 에러 스택:', err.stack)
         setError(err.message)
         setAllSlides([])
       } finally {
-        console.log('🏁 히어로 슬라이더 로딩 완료')
         setIsLoading(false)
       }
     }
@@ -81,31 +69,16 @@ export default function Hero() {
 
   // 자동 슬라이드
   useEffect(() => {
-    console.log('⏰ 자동 슬라이드 useEffect 실행')
-    console.log('⏰ isAutoPlaying:', isAutoPlaying)
-    console.log('⏰ isLoading:', isLoading)
-    console.log('⏰ allSlides.length:', allSlides.length)
-    
     if (!isAutoPlaying || isLoading || allSlides.length === 0) {
-      console.log('⏰ 자동 슬라이드 조건 불만족 - 종료')
       return
     }
 
     const interval = setInterval(() => {
-      console.log('⏰ 자동 슬라이드 실행')
       const maxSlides = window.innerWidth < 1024 ? allSlides.length : slideGroups.length
-      console.log('⏰ maxSlides:', maxSlides, 'window.innerWidth:', window.innerWidth)
-      
-      setCurrentSlide((prev) => {
-        const nextSlide = (prev + 1) % maxSlides
-        console.log('⏰ 슬라이드 변경:', prev, '->', nextSlide)
-        return nextSlide
-      })
+      setCurrentSlide((prev) => (prev + 1) % maxSlides)
     }, 5000)
 
-    console.log('⏰ 자동 슬라이드 interval 설정 완료')
     return () => {
-      console.log('⏰ 자동 슬라이드 interval 정리')
       clearInterval(interval)
     }
   }, [isAutoPlaying, allSlides.length, slideGroups.length, isLoading])
@@ -129,9 +102,6 @@ export default function Hero() {
 
   // 상품 페이지로 이동하는 함수
   const handleProductClick = (slideId, slideTitle) => {
-    console.log('🔗 상품 클릭됨:', slideId, slideTitle)
-    console.log('🔗 이동할 URL:', `/product/${slideId}`)
-    
     router.push(`/product/${slideId}`)
   }
 
@@ -140,9 +110,6 @@ export default function Hero() {
     e.stopPropagation()
     e.preventDefault()
     
-    console.log('🔍 위시리스트 토글 - 슬라이드 ID:', slide.id, '타입:', typeof slide.id)
-    console.log('🔍 위시리스트 토글 - 전체 슬라이드 데이터:', slide)
-    
     if (!isAuthenticated) {
       showToastMessage('로그인이 필요한 서비스입니다.')
       return
@@ -150,7 +117,6 @@ export default function Hero() {
 
     try {
       const wasInWishlist = isInWishlist(slide.id)
-      console.log('🔍 토글 전 위시리스트 상태:', wasInWishlist)
       
       toggleWishlist(slide.id)
       
@@ -170,9 +136,6 @@ export default function Hero() {
     e.stopPropagation()
     e.preventDefault()
     
-    // 디버깅: 슬라이드 데이터 확인
-    console.log('🔍 슬라이드 전체 데이터:', slide)
-    
     try {
       if (isInCart(slide.id)) {
         showToastMessage(`${slide.title}은(는) 이미 장바구니에 있습니다.`)
@@ -183,7 +146,6 @@ export default function Hero() {
       const productData = products.find(p => p.id === slide.id)
       
       if (!productData) {
-        console.error('❌ 상품 데이터를 찾을 수 없습니다:', slide.id)
         showToastMessage('상품 정보를 찾을 수 없습니다.')
         return
       }
@@ -198,8 +160,6 @@ export default function Hero() {
         image: slide.image || productData.image, // 슬라이드 이미지 우선 사용
         description: productData.description
       }
-
-      console.log('🔍 장바구니에 추가할 상품 데이터:', cartItem)
 
       addToCart(cartItem)
       showToastMessage(`${slide.title}이(가) 장바구니에 추가되었습니다.`)
@@ -300,16 +260,16 @@ export default function Hero() {
 
   // 로딩 상태
   if (isLoading) {
-    console.log('⏳ Hero 컴포넌트 로딩 상태 표시')
     return (
       <section className="pt-24 pb-16 bg-gray-50 min-h-screen">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
-              PretiumSound
+              좋은 교재, 새로운 기회
             </h1>
             <p className="text-lg lg:text-xl text-gray-600 max-w-2xl mx-auto">
-              전문 음악가들이 집필한 고품질 교재로 체계적인 음악 학습을 경험해보세요
+              전문 음악가들이 집필한 고품질 교재로<br/>
+              체계적인 음악 학습을 경험해보세요
             </p>
           </div>
           <div className="flex justify-center items-center h-64">
@@ -325,16 +285,16 @@ export default function Hero() {
 
   // 슬라이드가 없는 경우 - 관리자에게 안내 메시지
   if (allSlides.length === 0) {
-    console.log('📭 Hero 컴포넌트 빈 상태 표시')
     return (
       <section className="pt-24 pb-16 bg-gray-50 min-h-screen">
         <div className="container mx-auto px-4">
           <div className="text-center">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
-              PretiumSound
+              좋은 교재, 새로운 기회
             </h1>
             <p className="text-lg lg:text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-              전문 음악가들이 집필한 고품질 교재로 체계적인 음악 학습을 경험해보세요
+              전문 음악가들이 집필한 고품질 교재로<br/>
+              체계적인 음악 학습을 경험해보세요
             </p>
             
             {/* 슬라이드가 없을 때 표시할 기본 콘텐츠 */}
@@ -404,10 +364,11 @@ export default function Hero() {
         {/* 헤더 - 추가 여백 적용 */}
         <div className="text-center mb-8 md:mb-10 lg:mb-12 xl:mb-16">
           <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-gray-800 mb-4 md:mb-6">
-            PretiumSound
+            좋은 교재, 새로운 기회
           </h1>
           <p className="text-lg lg:text-xl xl:text-2xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            전문 음악가들이 집필한 고품질 교재로 체계적인 음악 학습을 경험해보세요
+            전문 음악가들이 집필한 고품질 교재로<br/>
+            체계적인 음악 학습을 경험해보세요
           </p>
         </div>
 

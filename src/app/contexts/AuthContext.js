@@ -55,11 +55,11 @@ export function AuthProvider({ children }) {
       if (isInWishlist) {
         // 위시리스트에서 제거
         newWishlist = prevWishlist.filter(id => id !== productIdStr)
-        console.log('💔 위시리스트에서 제거:', productId)
+        // console.debug('위시리스트에서 제거:', productId)
       } else {
         // 위시리스트에 추가
         newWishlist = [...prevWishlist, productIdStr]
-        console.log('💖 위시리스트에 추가:', productId)
+        // console.debug('위시리스트에 추가:', productId)
       }
       
       // 로컬 스토리지에 저장
@@ -88,7 +88,7 @@ export function AuthProvider({ children }) {
     
     setWishlist([])
     saveWishlist(user.id, [])
-    console.log('🗑️ 위시리스트 전체 삭제')
+    // console.debug('위시리스트 전체 삭제')
   }, [user, saveWishlist])
 
 // 인증된 API 요청을 위한 헬퍼 함수 (수정된 버전)
@@ -114,10 +114,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       throw new Error('유효한 세션이 없습니다.');
     }
 
-    console.log('🔑 인증된 요청:', url, {
-      method: options.method || 'GET',
-      hasToken: !!session.access_token
-    });
+    // console.debug('인증된 요청:', url)
 
     // 헤더 설정
     const headers = {
@@ -132,7 +129,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       headers
     });
 
-    console.log('📡 응답 상태:', response.status, response.statusText);
+    // console.debug('응답 상태:', response.status, response.statusText);
 
     return response;
 
@@ -147,7 +144,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     if (!user || !supabase) return false
 
     try {
-      console.log('🔍 구매 여부 확인:', user.id, productId)
+      // console.debug('구매 여부 확인:', user.id, productId)
 
       // RLS가 적용된 상태로 주문 조회 (사용자는 자신의 주문만 조회 가능)
       const { data, error } = await supabase
@@ -165,7 +162,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         order.items?.some(item => item.id === productId || item.id === parseInt(productId))
       )
 
-      console.log('✅ 구매 여부 결과:', hasPurchased)
+      // console.debug('구매 여부 결과:', hasPurchased)
       return hasPurchased
 
     } catch (error) {
@@ -205,7 +202,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     }
 
     try {
-      console.log('💬 리뷰 저장 시작:', reviewData)
+      // console.debug('리뷰 저장 시작')
 
       // RLS가 적용된 상태로 리뷰 저장 (사용자는 자신의 리뷰만 생성 가능)
       const supabaseReviewData = {
@@ -228,7 +225,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw error
       }
 
-      console.log('✅ 리뷰 저장 성공 (사진 포함):', data)
+      // console.debug('리뷰 저장 성공')
       return data
 
     } catch (error) {
@@ -263,7 +260,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw error
       }
 
-      console.log('✅ 리뷰 수정 성공 (사진 포함):', data)
+      // console.debug('리뷰 수정 성공')
       return data
 
     } catch (error) {
@@ -290,7 +287,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw error
       }
 
-      console.log('✅ 리뷰 삭제 성공')
+      // console.debug('리뷰 삭제 성공')
       return true
 
     } catch (error) {
@@ -306,7 +303,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     }
 
     try {
-      console.log('🚀 Auth 초기화 시작... (시도:', retryCount + 1, ')')
+      // console.debug('Auth 초기화 시작... (시도:', retryCount + 1, ')')
       setError(null)
       
       const client = await getSupabase()
@@ -321,23 +318,23 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       const { data: { session }, error: sessionError } = await client.auth.getSession()
       
       if (sessionError) {
-        console.warn('세션 가져오기 경고:', sessionError)
+        // console.warn('세션 가져오기 경고:', sessionError)
       } 
       
       if (session?.user) {
-        console.log('✅ 기존 세션 복원:', session.user.email)
+        // console.debug('기존 세션 복원:', session.user.email)
         setUser(session.user)
         // 위시리스트 로드
         const userWishlist = loadWishlist(session.user.id)
         setWishlist(userWishlist)
       } else {
-        console.log('❌ 기존 세션 없음')
+        // console.debug('기존 세션 없음')
       }
 
       // 인증 상태 변화 감지
       const { data: { subscription } } = client.auth.onAuthStateChange(
         (event, session) => {
-          console.log('🔄 인증 상태 변화:', event, session?.user?.email)
+          // console.debug('인증 상태 변화:', event, session?.user?.email)
           setUser(session?.user || null)
           
           if (session?.user) {
@@ -361,18 +358,18 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       }
 
     } catch (error) {
-      console.error('💥 Auth 초기화 실패:', error)
+      console.error('Auth 초기화 실패:', error)
       setError(error.message)
       setLoading(false)
       setSupabaseReady(false)
 
       if (retryCount < 2) {
-        console.log('🔄 5초 후 재시도...')
+        // console.debug('5초 후 재시도...')
         setTimeout(() => {
           setRetryCount(prev => prev + 1)
         }, 5000)
       } else {
-        console.error('❌ 최대 재시도 횟수 초과')
+        console.error('최대 재시도 횟수 초과')
       }
     }
   }, [retryCount, loadWishlist])
@@ -400,7 +397,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     try {
       setLoading(true)
       setError(null)
-      console.log('🔐 로그인 시도:', email)
+      // console.debug('로그인 시도')
   
       if (!email || !password) {
         throw new Error('이메일과 비밀번호를 입력해주세요.')
@@ -429,12 +426,12 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw new Error('사용자 데이터가 없습니다.')
       }
   
-      console.log('✅ 로그인 성공:', data.user.email)
+      // console.debug('로그인 성공')
       // 위시리스트는 onAuthStateChange에서 자동으로 로드됨
       return { user: data.user, error: null }
   
     } catch (error) {
-      console.error('💥 로그인 실패:', error)
+      console.error('로그인 실패:', error)
       setError(error.message)
       throw error
     } finally {
@@ -450,7 +447,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     try {
       setLoading(true)
       setError(null)
-      console.log('📝 회원가입 시도:', userData.email)
+      // console.debug('회원가입 시도')
   
       const { data, error } = await supabase.auth.signUp({
         email: userData.email,
@@ -476,14 +473,55 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         }
       }
   
-      console.log('✅ 회원가입 성공:', data.user?.email)
+      // console.debug('회원가입 성공')
       return { user: data.user, error: null }
   
     } catch (error) {
-      console.error('💥 회원가입 실패:', error)
+      console.error('회원가입 실패:', error)
       setError(error.message)
       throw error
     } finally {
+      setLoading(false)
+    }
+  }
+
+  const loginWithGoogle = async () => {
+    if (!supabase) {
+      throw new Error('인증 시스템이 아직 준비되지 않았습니다.')
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      // console.debug('구글 로그인 시도')
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+      const redirectTo = origin
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent'
+          }
+        }
+      })
+
+      if (error) {
+        console.error('🚨 구글 로그인 에러:', error)
+        throw new Error(error.message || '구글 로그인에 실패했습니다.')
+      }
+
+      // OAuth는 보통 리다이렉트되므로 여기서 추가 처리 없이 반환
+      return data
+    } catch (error) {
+      console.error('구글 로그인 실패:', error)
+      setError(error.message)
+      throw error
+    } finally {
+      // 리다이렉트가 발생하면 이 finally는 실행되지 않을 수 있음
       setLoading(false)
     }
   }
@@ -494,7 +532,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     }
 
     try {
-      console.log('🚪 로그아웃 시도')
+      // console.debug('로그아웃 시도')
       
       const { error } = await supabase.auth.signOut()
       
@@ -503,11 +541,11 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw error
       }
       
-      console.log('✅ 로그아웃 성공')
+      // console.debug('로그아웃 성공')
       setUser(null)
       setWishlist([]) // 위시리스트 초기화
     } catch (error) {
-      console.error('💥 로그아웃 실패:', error)
+      console.error('로그아웃 실패:', error)
       setUser(null) // 강제 로그아웃
       setWishlist([]) // 위시리스트 초기화
       throw error
@@ -516,7 +554,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
 
   // 보안이 강화된 주문 추가 함수
   const addOrder = async (orderData) => {
-    console.log('🔧 addOrder 호출됨!')
+    // console.debug('addOrder 호출')
     
     if (!supabase || !user) {
       console.error('❌ supabase 또는 user 없음')
@@ -524,7 +562,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     }
 
     try {
-      console.log('💾 주문 저장 시작:', orderData)
+      // console.debug('주문 저장 시작')
 
       // 인증된 API 요청을 통해 주문 생성
       const response = await makeAuthenticatedRequest('/api/orders', {
@@ -553,11 +591,11 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
         throw new Error(result.error || '주문 생성 실패');
       }
 
-      console.log('✅ 주문 저장 성공:', result.order)
+      // console.debug('주문 저장 성공')
       return result.order;
 
     } catch (error) {
-      console.error('💥 주문 추가 실패 상세:', error)
+      console.error('주문 추가 실패 상세:', error)
       throw error
     }
   }
@@ -570,7 +608,8 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
   }, [initializeAuth])
 
   // 관리자 권한 확인
-  const isAdmin = user?.email === 'admin@pretiumsound.com' || user?.user_metadata?.role === 'admin'
+  const ADMIN_EMAILS = new Set(['admin@pretiumsound.com', 'jasonincompany@gmail.com'])
+  const isAdmin = (user && ADMIN_EMAILS.has(user.email)) || user?.user_metadata?.role === 'admin'
 
   // 관리자용 함수들 (기존 localStorage 기반 유지)
   const getAllUsers = () => {
@@ -628,6 +667,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     login,
     signup,
     logout,
+    loginWithGoogle,
     retry,
     isAuthenticated: !!user,
     isAdmin,

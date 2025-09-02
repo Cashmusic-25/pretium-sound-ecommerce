@@ -97,9 +97,10 @@ export default function AdminDashboard() {
       setStats({
         totalRevenue: salesStats.totalSales || 0,
         totalOrders: salesStats.totalOrders || 0,
-        averageOrderValue: salesStats.totalOrders > 0 ? (salesStats.totalSales / salesStats.totalOrders) : 0,
+        completedOrders: salesStats.completedOrders || 0,
+        averageOrderValue: (salesStats.totalOrders > 0 ? (salesStats.totalSales / salesStats.totalOrders) : 0),
         thisMonthRevenue: salesStats.monthlySales || 0,
-        lastMonthRevenue: salesStats.totalSales - salesStats.monthlySales || 0,
+        lastMonthRevenue: salesStats.totalSales - (salesStats.monthlySales || 0) || 0,
         monthlyGrowth: salesStats.salesGrowth || 0,
         totalUsers: userStats.totalUsers || 0,
         newUsersThisMonth: userStats.monthlyUsers || 0,
@@ -152,9 +153,9 @@ export default function AdminDashboard() {
   const getStatusLabel = (status) => {
     const labels = {
       'pending': '결제 대기',
-      'processing': '처리 중',
+      'processing': '결제 완료',
       'shipped': '배송 중',
-      'delivered': '배송 완료',
+      'delivered': '결제 완료',
       'cancelled': '취소됨'
     }
     return labels[status] || '알 수 없음'
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">총 주문</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats?.totalOrders || 0}</p>
+                  <p className="text-2xl font-bold text-gray-900">{(stats?.completedOrders || 0)}/{(stats?.totalOrders || 0)}</p>
                 </div>
                 <div className="bg-blue-100 p-3 rounded-full">
                   <ShoppingBag className="text-blue-600" size={24} />

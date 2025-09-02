@@ -21,15 +21,8 @@ export default function Header() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth()
   const router = useRouter()
 
-  // 업데이트된 네비게이션 아이템 (방관리 메뉴 추가)
-  const navItems = [
-    { name: '홈', href: '#home' },
-    { name: '교재', href: '#products' },
-    { name: '방 예약', href: '/rooms' },      // 새로 추가
-    { name: '일정', href: '/schedule' },      // 새로 추가
-    { name: '소개', href: '#about' },
-    { name: '문의', href: '#contact' }
-  ]
+  // 네비게이션 항목 숨김
+  const navItems = []
 
   const handleCartClick = () => {
     setIsCartOpen(true)
@@ -103,23 +96,13 @@ export default function Header() {
                 </div>
               </div>
               <div className="text-2xl font-bold gradient-text group-hover:text-blue-400 transition-colors duration-200">
-                PRETIUM SOUND
+                PRETIUM SOUND Edu CENTER
               </div>
             </div>
 
             {/* 데스크톱 네비게이션 - 일반화된 메뉴 */}
             <div className="hidden md:flex items-center space-x-8">
-              {navItems.map((item) => (
-                <button
-                  key={item.name}
-                  onClick={() => handleNavClick(item.href)}
-                  className="text-gray-300 hover:text-blue-400 font-medium transition-colors duration-200 flex items-center space-x-1"
-                >
-                  {item.name === '방 예약' && <MapPin size={18} />}
-                  {item.name === '일정' && <Calendar size={18} />}
-                  <span>{item.name}</span>
-                </button>
-              ))}
+              {/* 상단 메뉴 제거 */}
               
               {/* 관리자 전용 메뉴 */}
               {isAdmin && (
@@ -187,28 +170,7 @@ export default function Header() {
                         <span>내 프로필</span>
                       </button>
 
-                      {/* 방관리 메뉴 일반화 */}
-                      <button 
-                        onClick={() => {
-                          router.push('/rooms')
-                          setIsUserMenuOpen(false)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
-                      >
-                        <MapPin size={16} />
-                        <span>방 예약</span>
-                      </button>
-
-                      <button 
-                        onClick={() => {
-                          router.push('/schedule')
-                          setIsUserMenuOpen(false)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 flex items-center space-x-2"
-                      >
-                        <Calendar size={16} />
-                        <span>일정 관리</span>
-                      </button>
+                      {/* 방 예약/일정 관리 제거 */}
                       
                       <button 
                         onClick={() => {
@@ -364,17 +326,7 @@ export default function Header() {
           {isMenuOpen && (
             <div className="md:hidden mt-4 pb-4 border-t border-gray-700">
               <div className="flex flex-col space-y-2 pt-4">
-                {navItems.map((item) => (
-                  <button
-                    key={item.name}
-                    onClick={() => handleNavClick(item.href)}
-                    className="text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors duration-200 flex items-center space-x-2"
-                  >
-                    {item.name === '방 예약' && <MapPin size={18} />}
-                    {item.name === '일정' && <Calendar size={18} />}
-                    <span>{item.name}</span>
-                  </button>
-                ))}
+                {/* 상단 메뉴 제거 - 모바일도 숨김 */}
                 
                 {/* 관리자 전용 모바일 메뉴 */}
                 {isAdmin && (
@@ -444,28 +396,7 @@ export default function Header() {
                       내 프로필
                     </button>
 
-                    {/* 모바일 방관리 메뉴 일반화 */}
-                    <button 
-                      onClick={() => {
-                        router.push('/rooms')
-                        setIsMenuOpen(false)
-                      }}
-                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center space-x-2"
-                    >
-                      <MapPin size={16} />
-                      <span>방 예약</span>
-                    </button>
-
-                    <button 
-                      onClick={() => {
-                        router.push('/schedule')
-                        setIsMenuOpen(false)
-                      }}
-                      className="w-full text-left text-gray-300 hover:text-blue-400 font-medium py-2 transition-colors flex items-center space-x-2"
-                    >
-                      <Calendar size={16} />
-                      <span>일정 관리</span>
-                    </button>
+                    {/* 모바일: 방 예약/일정 관리 제거 */}
 
                     <button 
                       onClick={() => {

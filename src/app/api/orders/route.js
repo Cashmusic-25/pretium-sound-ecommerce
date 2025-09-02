@@ -63,11 +63,10 @@ export async function POST(request) {
 
     console.log('💾 삽입할 주문 데이터:', orderData);
 
-    const { data, error } = await supabaseAdmin
-      .from('orders')
-      .insert([orderData])
-      .select()
-      .single();
+    // 결제 완료 정책으로 변경: 주문 생성 API는 사용하지 않도록 가드
+    return Response.json({
+      error: '결제 완료 후에만 주문이 생성됩니다.',
+    }, { status: 400 })
 
     if (error) {
       console.error('❌ 주문 생성 오류:', error);
@@ -116,10 +115,12 @@ export async function GET(request) {
     // 3. Service Role로 해당 사용자의 주문만 조회
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
+    // 결제 완료 + 취소 주문 포함 노출
     const { data, error } = await supabaseAdmin
       .from('orders')
       .select('*')
       .eq('user_id', user.id) // 인증된 사용자의 주문만
+      .in('status', ['processing', 'delivered', 'cancelled'])
       .order('created_at', { ascending: false });
 
     if (error) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Edit3, Mail, Calendar, Package, Heart, ShoppingBag, Trophy, ArrowLeft } from 'lucide-react'
+import { User, Edit3, Mail, Calendar, Package, Heart, ShoppingBag, Trophy, ArrowLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useCart } from '../contexts/CartContext'
 import Header from '../components/Header'
@@ -10,7 +10,7 @@ import Avatar from '../components/Avatar'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, isAuthenticated, updateUser } = useAuth()
+  const { user, isAuthenticated, updateUser, makeAuthenticatedRequest, logout } = useAuth()
   const { getTotalItems } = useCart()
   
   const [isEditing, setIsEditing] = useState(false)
@@ -66,6 +66,23 @@ export default function ProfilePage() {
     })
     setIsEditing(false)
   }
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('정말로 탈퇴하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
+    try {
+      const res = await makeAuthenticatedRequest('/api/profile/delete-account', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '탈퇴 실패')
+      alert('계정이 삭제되었습니다. 그동안 이용해주셔서 감사합니다.')
+      await logout()
+      router.push('/')
+    } catch (e) {
+      console.error('탈퇴 실패:', e)
+      alert(e.message || '탈퇴 중 오류가 발생했습니다')
+    }
+  }
+
+  // 역할 변경은 관리자 화면에서만 허용
 
   const calculateUserLevel = () => {
     const orders = user?.orders || []
@@ -295,6 +312,21 @@ export default function ProfilePage() {
                     <div>
                       <h4 className="font-semibold text-gray-800">고객센터</h4>
                       <p className="text-sm text-gray-600">문의사항이 있으시면 연락주세요</p>
+                    </div>
+                  </button>
+
+                  {/* 역할 변경 버튼 제거 (관리자 화면으로 이동) */}
+
+                  <button
+                    onClick={handleDeleteAccount}
+                    className="flex items-center space-x-4 p-4 border border-red-200 rounded-xl hover:bg-red-50 transition-all duration-300 text-left"
+                  >
+                    <div className="bg-red-100 p-3 rounded-lg">
+                      <Trash2 className="text-red-600" size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-800">회원 탈퇴</h4>
+                      <p className="text-sm text-gray-600">계정과 데이터가 삭제됩니다</p>
                     </div>
                   </button>
                 </div>

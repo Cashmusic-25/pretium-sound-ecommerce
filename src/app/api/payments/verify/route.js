@@ -4,7 +4,7 @@ const PORTONE_API_BASE = 'https://api.portone.io';
 
 export async function POST(request) {
   try {
-    const { paymentId, orderId } = await request.json();
+    const { paymentId, orderId, items = [], totalAmount, userId: userIdFromClient } = await request.json();
     console.log('V2 결제 검증 요청:', { paymentId, orderId });
 
     if (!paymentId || !orderId) {
@@ -61,29 +61,38 @@ export async function POST(request) {
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
+
+    // 3-1. 요청 사용자 식별 (있으면 user_id로 사용)
+    let userId = userIdFromClient || null;
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        const supabaseAnon = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        );
+        const { data: { user } } = await supabaseAnon.auth.getUser(token);
+        userId = user?.id || null;
+      }
+    } catch (e) {
+      console.warn('요청 사용자 확인 실패(계속 진행):', e?.message);
+    }
     
     console.log('주문 정보 조회 시작...');
-    const { data: orderData, error: orderError } = await supabase
+    const { data: existingOrder, error: orderFetchError } = await supabase
       .from('orders')
       .select('*')
       .eq('id', orderId)
       .single();
-
-    if (orderError) {
-      console.error('주문 조회 오류:', orderError);
-      throw new Error('주문 정보를 찾을 수 없습니다.');
+    if (orderFetchError && orderFetchError.code !== 'PGRST116') {
+      console.error('주문 조회 오류:', orderFetchError);
+      throw new Error('주문 정보를 조회할 수 없습니다.');
     }
-
-    if (!orderData) {
-      console.error('주문 데이터 없음');
-      throw new Error('주문 정보를 찾을 수 없습니다.');
-    }
-
-    console.log('주문 정보:', orderData);
 
     // 4. 결제 금액 검증
     const portoneAmount = paymentData.amount?.total || paymentData.amount;
-    const orderAmount = orderData.total_amount;
+    const orderAmount = existingOrder?.total_amount ?? totalAmount ?? portoneAmount;
     
     console.log('금액 비교:', {
       포트원_금액: portoneAmount,
@@ -97,23 +106,56 @@ export async function POST(request) {
     // 5. 결제 상태 확인
     console.log('V2 결제 상태:', paymentData.status);
 
-    // 6. 주문 상태 업데이트
-    console.log('주문 상태 업데이트 시작...');
-    const { error: updateError } = await supabase
-      .from('orders')
-      .update({
+    // 6. 주문 생성 또는 업데이트 (결제 완료만 저장/유지)
+    console.log('주문 상태 업데이트/생성 시작...');
+    let finalOrderId = orderId;
+    if (existingOrder) {
+      const fieldsToUpdate = {
         status: 'processing',
         payment_id: paymentId,
         payment_method: paymentData.method?.type || 'KAKAOPAY',
         payment_status: 'completed',
+        total_amount: orderAmount,
         updated_at: new Date().toISOString()
-      })
-      .eq('id', orderId);
-
-    if (updateError) {
-      console.error('주문 상태 업데이트 실패:', updateError);
-      throw new Error('주문 상태 업데이트 실패');
+      };
+      if (!existingOrder.items || existingOrder.items.length === 0) {
+        fieldsToUpdate.items = items;
+      }
+      if (!existingOrder.user_id && userId) {
+        fieldsToUpdate.user_id = userId;
+      }
+      const { error: updateError } = await supabase
+        .from('orders')
+        .update(fieldsToUpdate)
+        .eq('id', orderId);
+      if (updateError) {
+        console.error('주문 상태 업데이트 실패:', updateError);
+        throw new Error('주문 상태 업데이트 실패');
+      }
+    } else {
+      const { data: inserted, error: insertError } = await supabase
+        .from('orders')
+        .insert([{
+          id: orderId,
+          user_id: userId,
+          items: items,
+          total_amount: orderAmount,
+          shipping_address: {},
+          status: 'processing',
+          payment_id: paymentId,
+          payment_method: paymentData.method?.type || 'KAKAOPAY',
+          payment_status: 'completed'
+        }])
+        .select()
+        .single();
+      if (insertError) {
+        console.error('주문 생성 실패:', insertError);
+        throw new Error('주문 생성 실패');
+      }
+      finalOrderId = inserted.id;
     }
+
+    // 업데이트 에러는 각 분기에서 처리함
 
     console.log('V2 결제 검증 완료');
 
@@ -128,7 +170,7 @@ export async function POST(request) {
         paidAt: paymentData.paidAt
       },
       order: {
-        id: orderData.id,
+        id: finalOrderId,
         status: 'processing'
       }
     });

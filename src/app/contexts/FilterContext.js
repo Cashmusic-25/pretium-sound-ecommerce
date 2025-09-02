@@ -26,14 +26,13 @@ export function FilterProvider({ children }) {
       try {
         setIsLoading(true)
         
-        console.log('🔄 ProductGrid - 상품 데이터 로드 시작')
+        // console.debug('ProductGrid - 상품 데이터 로드 시작')
         
         // 동적 import를 사용하여 productHelpers 로드
         const { getAllVisibleProducts } = await import('../../data/productHelpers')
         const supabaseProducts = await getAllVisibleProducts()
         
-        console.log('✅ ProductGrid - 로드된 상품:', supabaseProducts.length, '개')
-        console.log('📋 ProductGrid - 상품 목록:', supabaseProducts.map(p => `${p.id}: ${p.title}`))
+        // console.debug('ProductGrid - 로드된 상품:', supabaseProducts.length)
         
         setProducts(supabaseProducts)
       } catch (error) {
@@ -50,7 +49,7 @@ export function FilterProvider({ children }) {
   // 카테고리 목록 추출
   const categories = useMemo(() => {
     const uniqueCategories = [...new Set(products.map(product => product.category))]
-    console.log('📂 사용 가능한 카테고리:', uniqueCategories)
+    // console.debug('사용 가능한 카테고리:', uniqueCategories)
     return ['all', ...uniqueCategories]
   }, [products])
 
@@ -121,7 +120,7 @@ export function FilterProvider({ children }) {
         break
     }
 
-    console.log('🔍 필터링 결과:', filtered.length, '개 상품')
+    // console.debug('필터링 결과:', filtered.length)
 
     return filtered
   }, [products, searchTerm, selectedCategory, priceRange, sortBy, isLoading, isClient])

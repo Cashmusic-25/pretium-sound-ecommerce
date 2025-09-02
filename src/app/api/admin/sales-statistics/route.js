@@ -9,6 +9,11 @@ export async function GET(request) {
   try {
     console.log('📊 교재별 매출 통계 API 시작');
 
+    if (!supabaseServiceKey) {
+      console.error('❌ SUPABASE_SERVICE_ROLE_KEY 미설정');
+      return Response.json({ error: '서버 설정 오류(SERVICE_ROLE_KEY 없음). 환경변수를 설정해주세요.' }, { status: 500 });
+    }
+
     // 1. Authorization 헤더 확인
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -26,9 +31,10 @@ export async function GET(request) {
       return Response.json({ error: '유효하지 않은 토큰입니다' }, { status: 401 });
     }
 
-    // 관리자 권한 확인 (실제 프로젝트에서는 users 테이블의 role 컬럼 등을 확인)
-    // 여기서는 임시로 특정 이메일로 확인
-    if (user.email !== 'admin@pretiumsound.com' && user.email !== 'jasonincompany@gmail.com') {
+    // 관리자 권한 확인: 허용 이메일 또는 메타데이터 role=admin
+    const adminEmails = new Set(['admin@pretiumsound.com', 'jasonincompany@gmail.com']);
+    const isAdmin = adminEmails.has(user.email) || user.user_metadata?.role === 'admin';
+    if (!isAdmin) {
       return Response.json({ error: '관리자 권한이 필요합니다' }, { status: 403 });
     }
 
@@ -37,6 +43,7 @@ export async function GET(request) {
     // 3. URL 파라미터 파싱
     const url = new URL(request.url);
     const timeRange = url.searchParams.get('timeRange') || '30days';
+    const period = url.searchParams.get('period'); // e.g., month:2025-12, quarter:2025-Q4
     const sortBy = url.searchParams.get('sortBy') || 'revenue';
     const sortOrder = url.searchParams.get('sortOrder') || 'desc';
 
@@ -44,7 +51,23 @@ export async function GET(request) {
     const now = new Date();
     let startDate = new Date();
     
-    switch (timeRange) {
+    if (period) {
+      const [kind, value] = period.split(':');
+      if (kind === 'month') {
+        const [y, m] = value.split('-').map(Number);
+        startDate = new Date(y, m - 1, 1);
+        const end = new Date(y, m, 1);
+        now.setTime(end.getTime());
+      } else if (kind === 'quarter') {
+        const [y, qStr] = value.split('-');
+        const yNum = Number(y);
+        const q = Number(qStr?.replace('Q',''));
+        const startMonth = (q - 1) * 3; // 0,3,6,9
+        startDate = new Date(yNum, startMonth, 1);
+        const end = new Date(yNum, startMonth + 3, 1);
+        now.setTime(end.getTime());
+      }
+    } else switch (timeRange) {
       case '7days':
         startDate.setDate(now.getDate() - 7);
         break;
@@ -74,7 +97,7 @@ export async function GET(request) {
       .select('*')
       .gte('created_at', startDate.toISOString())
       .lte('created_at', now.toISOString())
-      .in('status', ['processing', 'shipped', 'delivered']); // 결제 완료된 주문만
+      .in('status', ['processing', 'delivered']); // 결제 완료된 주문만 (E-book)
 
     if (error) {
       console.error('❌ 주문 데이터 조회 실패:', error);

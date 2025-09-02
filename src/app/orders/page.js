@@ -40,8 +40,9 @@ export default function OrdersPage() {
         const result = await response.json()
         console.log('✅ 주문 조회 성공:', result.orders.length, '개')
   
-        // API 응답 데이터를 기존 형식으로 변환
-        const formattedOrders = result.orders.map(order => ({
+        // API 응답 데이터를 기존 형식으로 변환 (취소 포함 전체 노출)
+        const formattedOrders = result.orders
+          .map(order => ({
           id: order.id,
           orderNumber: `PS${order.id}`, // 주문번호 형식
           userId: order.user_id,
@@ -522,7 +523,7 @@ function OrderItemWithDownloads({
           <div className="flex items-center space-x-2">
             <span className="text-yellow-600">⏳</span>
             <p className="text-xs text-yellow-800">
-              결제 완료 후 다운로드가 가능합니다.
+              결제 완료 후 다운로드가 가능합니다. 취소된 주문은 다운로드할 수 없습니다.
             </p>
           </div>
         </div>

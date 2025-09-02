@@ -11,7 +11,7 @@ export async function getAllVisibleProducts() {
       return []
     }
 
-    console.log('🔄 getAllVisibleProducts - DB 조회 시작')
+    // console.debug('getAllVisibleProducts - DB 조회 시작')
 
     const { data, error } = await supabase
       .from('products')
@@ -34,8 +34,7 @@ export async function getAllVisibleProducts() {
       files: product.files || []
     }))
 
-    console.log('✅ getAllVisibleProducts - 조회 성공:', formattedProducts.length, '개')
-    console.log('📋 상품 ID 목록:', formattedProducts.map(p => `${p.id}: ${p.title}`))
+    // console.debug('getAllVisibleProducts - 조회 성공:', formattedProducts.length)
     
     return formattedProducts
 
@@ -60,7 +59,7 @@ export async function getVisibleProductById(id) {
       return null
     }
 
-    console.log('🔄 getVisibleProductById - ID로 조회:', numericId)
+    // console.debug('getVisibleProductById - ID로 조회:', numericId)
 
     const { data, error } = await supabase
       .from('products')
@@ -89,7 +88,7 @@ export async function getVisibleProductById(id) {
       files: data.files || []
     }
 
-    console.log('✅ getVisibleProductById - 조회 성공:', formattedProduct.title)
+    // console.debug('getVisibleProductById - 조회 성공:', formattedProduct.title)
     return formattedProduct
 
   } catch (error) {
@@ -101,7 +100,7 @@ export async function getVisibleProductById(id) {
 // 상품 생성
 export async function createProduct(productData) {
   try {
-    console.log('🔧 createProduct 시작 - 입력 데이터:', productData)
+    // console.debug('createProduct 시작')
     
     const supabase = await getSupabase()
     if (!supabase) {
@@ -128,7 +127,7 @@ export async function createProduct(productData) {
       is_active: true
     }
 
-    console.log('💾 상품 저장 중:', insertData.title)
+    // console.debug('상품 저장 중:', insertData.title)
 
     const { data, error } = await supabase
       .from('products')
@@ -141,7 +140,7 @@ export async function createProduct(productData) {
       throw error
     }
 
-    console.log('✅ 상품 생성 성공:', data.title)
+    // console.debug('상품 생성 성공:', data.title)
 
     return {
       ...data,
@@ -183,7 +182,7 @@ export async function updateProduct(productId, productData) {
       updated_at: new Date().toISOString()
     }
 
-    console.log('🔄 상품 수정 중:', updateData.title)
+    // console.debug('상품 수정 중:', updateData.title)
 
     const { data, error } = await supabase
       .from('products')
@@ -197,7 +196,7 @@ export async function updateProduct(productId, productData) {
       throw error
     }
 
-    console.log('✅ 상품 수정 성공:', data.title)
+    // console.debug('상품 수정 성공:', data.title)
 
     return {
       ...data,
@@ -219,7 +218,7 @@ export async function deleteProduct(productId) {
       throw new Error('Supabase 연결이 필요합니다')
     }
 
-    console.log('🗑️ 상품 삭제 중:', productId)
+    // console.debug('상품 삭제 중:', productId)
 
     const { error } = await supabase
       .from('products')
@@ -231,7 +230,7 @@ export async function deleteProduct(productId) {
       throw error
     }
 
-    console.log('✅ 상품 삭제 성공:', productId)
+    // console.debug('상품 삭제 성공:', productId)
     return true
   } catch (error) {
     console.error('상품 삭제 중 오류:', error)
@@ -241,7 +240,7 @@ export async function deleteProduct(productId) {
 
 // 이미지를 Supabase Storage에 업로드
 export async function uploadProductImage(file) {
-  console.log('🔄 이미지 업로드 시작:', file.name, file.size);
+  // console.debug('이미지 업로드 시작')
   
   try {
     const supabase = await getSupabase()
@@ -253,14 +252,13 @@ export async function uploadProductImage(file) {
     const fileName = `product_${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`
     const filePath = `products/${fileName}`
     
-    console.log('📁 파일 경로:', filePath);
+    // console.debug('파일 경로:', filePath);
 
     const { data, error } = await supabase.storage
       .from('product-images')
       .upload(filePath, file)
 
-    console.log('📤 업로드 결과 - data:', data);
-    console.log('❌ 업로드 결과 - error:', error);
+    // console.debug('업로드 결과 - data/error:', { data, error });
 
     if (error) {
       console.error('🚨 이미지 업로드 실패:', error)
@@ -271,7 +269,7 @@ export async function uploadProductImage(file) {
       .from('product-images')
       .getPublicUrl(filePath)
 
-    console.log('✅ 생성된 공개 URL:', publicUrl);
+    // console.debug('생성된 공개 URL:', publicUrl);
 
     return {
       url: publicUrl,
@@ -302,7 +300,7 @@ export async function getSalesStats() {
     // 주문 데이터 조회
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('total_amount, created_at')
+      .select('total_amount, created_at, status')
 
     if (error) {
       console.warn('매출 통계 조회 실패:', error)
@@ -316,26 +314,54 @@ export async function getSalesStats() {
       }
     }
 
-    const totalSales = orders.reduce((sum, order) => sum + order.total_amount, 0)
+    // 취소되지 않은 주문만 집계 (결제완료/진행 상태만)
+    const includedStatuses = new Set(['processing', 'shipped', 'delivered'])
+    const completedStatuses = new Set(['processing', 'delivered'])
+
+    const validOrders = orders.filter(o => includedStatuses.has(o.status))
+    const completedOrders = orders.filter(o => completedStatuses.has(o.status))
+
+    const totalSales = validOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+    // 전체 주문 수(취소 포함)
     const totalOrders = orders.length
 
-    // 이번 달 데이터
-    const thisMonth = new Date()
-    thisMonth.setDate(1)
-    
-    const monthlyOrders = orders.filter(order => 
-      new Date(order.created_at) >= thisMonth
-    )
-    
-    const monthlySales = monthlyOrders.reduce((sum, order) => sum + order.total_amount, 0)
+    // 달력 월 기준 범위 계산 (이번 달 1일~말일, 전월 1일~말일)
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+
+    // 이번 달 주문/매출
+    const thisMonthOrders = validOrders.filter(order => {
+      const createdAt = new Date(order.created_at)
+      return createdAt >= monthStart && createdAt < nextMonthStart
+    })
+    const thisMonthSales = thisMonthOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+
+    // 전월 주문/매출
+    const lastMonthOrders = validOrders.filter(order => {
+      const createdAt = new Date(order.created_at)
+      return createdAt >= lastMonthStart && createdAt < monthStart
+    })
+    const lastMonthSales = lastMonthOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+
+    // 전월 대비 성장률 (%). 전월 0이면 0%
+    const salesGrowth = lastMonthSales > 0 
+      ? ((thisMonthSales - lastMonthSales) / lastMonthSales) * 100 
+      : 0
+    const orderGrowth = lastMonthOrders.length > 0 
+      ? ((thisMonthOrders.length - lastMonthOrders.length) / lastMonthOrders.length) * 100 
+      : 0
 
     return {
       totalSales,
-      monthlySales,
+      monthlySales: thisMonthSales,
+      lastMonthSales,
       totalOrders,
-      monthlyOrders: monthlyOrders.length,
-      salesGrowth: 12.5, // 임시값
-      orderGrowth: 8.3    // 임시값
+      completedOrders: completedOrders.length,
+      monthlyOrders: thisMonthOrders.length,
+      salesGrowth,
+      orderGrowth
     }
   } catch (error) {
     console.error('매출 통계 조회 실패:', error)
@@ -383,7 +409,7 @@ export async function getUserStats() {
       new Date(user.created_at) >= thisMonth
     ).length || 0
 
-    console.log('✅ 사용자 통계 업데이트:', { totalUsers, monthlyUsers })
+    // console.debug('사용자 통계 업데이트:', { totalUsers, monthlyUsers })
 
     return {
       totalUsers,
@@ -473,6 +499,7 @@ export async function getRecentOrders(limit = 5) {
         shipping_address,
         users!inner(name, email)
       `)
+      .in('status', ['processing', 'cancelled'])
       .order('created_at', { ascending: false })
       .limit(limit)
 
