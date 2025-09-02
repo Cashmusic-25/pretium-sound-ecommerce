@@ -1,7 +1,9 @@
 
-'use client';
 
-import { useState, useEffect } from 'react';
+'use client';
+export const dynamic = 'force-dynamic'
+
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -16,7 +18,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-export default function SalesStatistics() {
+function SalesStatisticsInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [salesData, setSalesData] = useState([]);
@@ -517,4 +519,12 @@ export default function SalesStatistics() {
       </div>
     </div>
   );
+}
+
+export default function SalesStatistics() {
+  return (
+    <Suspense fallback={<div className="bg-white rounded-xl shadow-lg p-8 text-center text-gray-600">로딩 중...</div>}>
+      <SalesStatisticsInner />
+    </Suspense>
+  )
 }
