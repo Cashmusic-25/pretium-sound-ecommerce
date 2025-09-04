@@ -154,7 +154,7 @@ export default function WishlistPage() {
         </div>
       )}
       
-      <div className="pt-24 pb-16">
+      <div className="pb-16">
         <div className="container mx-auto px-4">
           {/* 뒤로가기 버튼 */}
           <button

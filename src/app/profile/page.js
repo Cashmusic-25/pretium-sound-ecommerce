@@ -125,7 +125,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
       
-      <div className="pt-24 pb-16">
+      <div className="pb-16">
         <div className="container mx-auto px-4">
           {/* 뒤로가기 */}
           <button

@@ -104,7 +104,7 @@ export default function ProductPage({ params }) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="pt-24 flex items-center justify-center min-h-[60vh]">
+        <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
             <p className="text-gray-600">상품을 불러오는 중...</p>
@@ -118,7 +118,7 @@ export default function ProductPage({ params }) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="pt-24 flex items-center justify-center min-h-[60vh]">
+        <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-800 mb-4">
               {error || '상품을 찾을 수 없습니다'}
@@ -144,7 +144,7 @@ export default function ProductPage({ params }) {
     <div className="min-h-screen bg-gray-50">
       <Header />
       
-      <div className="pt-24 pb-16">
+      <div className="pb-16">
         <div className="container mx-auto px-4">
           {/* 뒤로가기 */}
           <button
@@ -159,15 +159,15 @@ export default function ProductPage({ params }) {
             {/* 왼쪽: 상품 이미지 */}
             <div className="space-y-6">
               <div className="bg-white rounded-2xl overflow-hidden shadow-lg">
-                <div className="aspect-square">
+                <div>
                   {product.image ? (
                     <img
                       src={product.image}
                       alt={product.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-auto object-contain"
                     />
                   ) : (
-                    <div className="bg-gradient-to-br from-indigo-500 to-purple-600 h-full flex items-center justify-center text-white text-8xl">
+                    <div className="bg-gradient-to-br from-indigo-500 to-purple-600 min-h-[300px] flex items-center justify-center text-white text-8xl">
                       {product.icon}
                     </div>
                   )}

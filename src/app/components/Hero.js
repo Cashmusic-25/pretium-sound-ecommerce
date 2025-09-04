@@ -261,7 +261,7 @@ export default function Hero() {
   // 로딩 상태
   if (isLoading) {
     return (
-      <section className="pt-24 pb-16 bg-gray-50 min-h-screen">
+      <section className="pb-16 bg-gray-50 min-h-screen">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
@@ -286,7 +286,7 @@ export default function Hero() {
   // 슬라이드가 없는 경우 - 관리자에게 안내 메시지
   if (allSlides.length === 0) {
     return (
-      <section className="pt-24 pb-16 bg-gray-50 min-h-screen">
+      <section className="pb-16 bg-gray-50 min-h-screen">
         <div className="container mx-auto px-4">
           <div className="text-center">
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
@@ -343,7 +343,7 @@ export default function Hero() {
   return (
     <section 
       id="home" 
-      className="pt-24 md:pt-28 lg:pt-32 xl:pt-36 pb-16 bg-gray-50 min-h-screen relative"
+      className="pb-16 bg-gray-50 min-h-screen relative"
     >
       
       {/* 토스트 메시지 */}

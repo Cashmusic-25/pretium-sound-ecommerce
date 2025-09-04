@@ -177,7 +177,7 @@ export default function AdminProductsPage() {
     <div className="min-h-screen bg-gray-50">
       <Header />
       
-      <div className="pt-24 pb-16">
+      <div className="pb-16">
         <div className="container mx-auto px-4">
           {/* 헤더 */}
           <div className="mb-8">
