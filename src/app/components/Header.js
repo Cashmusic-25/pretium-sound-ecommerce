@@ -1,7 +1,7 @@
 // src/components/Header.js - 방관리 메뉴 일반화 버전
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Menu, X, ShoppingCart, User, LogOut, Heart, Package, Settings, BarChart3, Calendar, MapPin } from 'lucide-react'
 import { useCart } from '../contexts/CartContext'
@@ -11,6 +11,7 @@ import AuthModal from './AuthModal'
 import Avatar from './Avatar'
 
 export default function Header() {
+  const headerRef = useRef(null)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
@@ -65,9 +66,38 @@ export default function Header() {
     setIsMenuOpen(false)
   }
 
+  // 헤더 높이에 따라 전역 패딩 동적 적용
+  useEffect(() => {
+    const element = headerRef.current
+    if (!element) return
+
+    const updateHeaderOffset = () => {
+      const rect = element.getBoundingClientRect()
+      const headerHeight = Math.ceil(rect.height)
+      const extraGapPx = 16 // 헤더와 본문 사이 여유 간격
+      const offset = headerHeight + extraGapPx
+      document.documentElement.style.setProperty('--app-header-height', `${headerHeight}px`)
+      document.documentElement.style.setProperty('--app-header-offset', `${offset}px`)
+    }
+
+    updateHeaderOffset()
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateHeaderOffset()
+    })
+    resizeObserver.observe(element)
+
+    window.addEventListener('resize', updateHeaderOffset)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateHeaderOffset)
+    }
+  }, [])
+
   return (
     <>
-      <header className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627', borderBottomColor: '#404041'}}>
+      <header ref={headerRef} className="fixed w-full top-0 z-40 backdrop-blur-lg border-b" style={{backgroundColor: '#262627', borderBottomColor: '#404041'}}>
         <nav className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             {/* 로고 섹션 - 기존과 동일 */}
