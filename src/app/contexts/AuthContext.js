@@ -314,6 +314,25 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       setSupabase(client)
       setSupabaseReady(true)
 
+      // OAuth 코드가 포함되어 있으면 세션 교환 시도 (보강 처리)
+      try {
+        const currentUrl = new URL(window.location.href)
+        const code = currentUrl.searchParams.get('code')
+        if (code) {
+          const { error: exchangeError } = await client.auth.exchangeCodeForSession(code)
+          if (!exchangeError) {
+            const next = currentUrl.searchParams.get('next') || '/'
+            if (next.startsWith('/')) {
+              window.history.replaceState({}, '', next)
+            } else {
+              window.history.replaceState({}, '', '/')
+            }
+          }
+        }
+      } catch (e) {
+        // 무시: 코드가 없거나 교환 실패 시에는 기본 흐름으로 진행
+      }
+
       // 현재 세션 확인
       const { data: { session }, error: sessionError } = await client.auth.getSession()
       
@@ -526,6 +545,44 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     }
   }
   
+  const loginWithKakao = async () => {
+    if (!supabase) {
+      throw new Error('인증 시스템이 아직 준비되지 않았습니다.')
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+      const redirectTo = origin
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'kakao',
+        options: {
+          redirectTo,
+          // OIDC 세션 생성을 위해 openid 포함, 이메일 검수 전이므로 email은 제외
+          queryParams: {
+            scope: 'openid account_email profile_nickname profile_image'
+          }
+        }
+      })
+
+      if (error) {
+        console.error('🚨 카카오 로그인 에러:', error)
+        throw new Error(error.message || '카카오 로그인에 실패했습니다.')
+      }
+
+      return data
+    } catch (error) {
+      console.error('카카오 로그인 실패:', error)
+      setError(error.message)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+  
   const logout = async () => {
     if (!supabase) {
       throw new Error('인증 시스템이 준비되지 않았습니다.')
@@ -668,6 +725,7 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
     signup,
     logout,
     loginWithGoogle,
+    loginWithKakao,
     retry,
     isAuthenticated: !!user,
     isAdmin,

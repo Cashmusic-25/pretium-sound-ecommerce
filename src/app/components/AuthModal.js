@@ -8,13 +8,25 @@ export default function AuthModal({ isOpen, onClose }) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { loginWithGoogle } = useAuth()
+  const { loginWithGoogle, loginWithKakao } = useAuth()
 
   const handleGoogle = async () => {
     try {
       setIsLoading(true)
       setError('')
       await loginWithGoogle()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleKakao = async () => {
+    try {
+      setIsLoading(true)
+      setError('')
+      await loginWithKakao()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -67,8 +79,8 @@ export default function AuthModal({ isOpen, onClose }) {
             </div>
           )}
 
-          {/* 소셜 로그인 - Google만 */}
-          <div>
+          {/* 소셜 로그인 - Google, Kakao */}
+          <div className="space-y-3">
             <button
               type="button"
               onClick={handleGoogle}
@@ -84,6 +96,23 @@ export default function AuthModal({ isOpen, onClose }) {
                 <>
                   <Chrome size={20} />
                   <span>Google로 계속하기</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleKakao}
+              disabled={isLoading}
+              className="w-full border border-yellow-300 text-gray-800 py-3 rounded-lg font-medium hover:bg-yellow-50 transition-all duration-300 flex items-center justify-center space-x-2 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <Loader className="animate-spin" size={20} />
+                  <span>처리 중...</span>
+                </>
+              ) : (
+                <>
+                  <span>카카오로 계속하기</span>
                 </>
               )}
             </button>
