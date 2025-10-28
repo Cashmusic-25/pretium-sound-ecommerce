@@ -102,9 +102,15 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       throw new Error('Supabase 클라이언트가 준비되지 않았습니다.');
     }
 
-    // 현재 세션 가져오기
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
+    // 세션 확보 (없으면 1회 갱신 시도)
+    let { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if ((!session || !session.access_token) && !sessionError) {
+      try {
+        await supabase.auth.refreshSession();
+      } catch {}
+      ({ data: { session }, error: sessionError } = await supabase.auth.getSession());
+    }
+
     if (sessionError) {
       console.error('세션 가져오기 오류:', sessionError);
       throw new Error('세션을 가져올 수 없습니다.');
@@ -114,22 +120,28 @@ const makeAuthenticatedRequest = async (url, options = {}) => {
       throw new Error('유효한 세션이 없습니다.');
     }
 
-    // console.debug('인증된 요청:', url)
-
-    // 헤더 설정
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      ...options.headers
+    const doRequest = async (token) => {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...options.headers
+      };
+      return await fetch(url, { ...options, headers });
     };
 
-    // fetch 요청
-    const response = await fetch(url, {
-      ...options,
-      headers
-    });
+    // 1차 요청
+    let response = await doRequest(session.access_token);
 
-    // console.debug('응답 상태:', response.status, response.statusText);
+    // 401이면 1회 갱신 후 재시도
+    if (response.status === 401) {
+      try {
+        await supabase.auth.refreshSession();
+      } catch {}
+      const { data: { session: session2 } } = await supabase.auth.getSession();
+      if (session2?.access_token) {
+        response = await doRequest(session2.access_token);
+      }
+    }
 
     return response;
 

@@ -79,7 +79,7 @@ export async function GET(request, { params }) {
       console.log(`🔍 상품 ${item.id} 파일 조회 중...`);
       
       // 상품 정보를 데이터베이스에서 조회 (products 테이블은 RLS 비활성화됨)
-      const { data: product, error: productError } = await supabaseClient
+      const { data: product, error: productError } = await supabaseAdmin
         .from('products')
         .select('files')
         .eq('id', item.id)
@@ -159,11 +159,24 @@ export async function GET(request, { params }) {
       lastError = error;
     }
 
+    // Signed URL 실패 시 public URL 폴백 (ebooks 버킷이 public=true)
     if (!signedUrlData) {
-      console.error('❌ Signed URL 생성 실패 (모든 경로 시도):', lastError);
-      return NextResponse.json({ 
-        error: '다운로드 링크 생성에 실패했습니다: ' + (lastError?.message || 'Object not found') 
-      }, { status: 500 });
+      console.warn('⚠️ Signed URL 생성 실패, 공개 URL 폴백 시도:', lastError?.message);
+      for (const path of candidatePaths) {
+        const { data } = await supabaseAdmin.storage
+          .from('ebooks')
+          .getPublicUrl(path);
+        if (data?.publicUrl) {
+          signedUrlData = { signedUrl: data.publicUrl };
+          break;
+        }
+      }
+      if (!signedUrlData) {
+        console.error('❌ 공개 URL 폴백도 실패 (모든 경로 시도):', lastError);
+        return NextResponse.json({ 
+          error: '다운로드 링크 생성에 실패했습니다: ' + (lastError?.message || 'Object not found') 
+        }, { status: 500 });
+      }
     }
 
     console.log('✅ 다운로드 링크 생성 성공');

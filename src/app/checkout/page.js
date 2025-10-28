@@ -58,7 +58,8 @@ export default function CheckoutPage() {
       totalAmount: amount,
       currency: "KRW",
       customer,
-      redirectUrl: `${window.location.origin}/order/complete?orderId=${orderId}`,
+      // iOS Safari 리디렉트 모드 대비: paymentId를 포함해 주문완료 페이지에서 검증 폴백 가능
+      redirectUrl: `${window.location.origin}/order/complete?orderId=${orderId}&paymentId=payment-${orderId}&uid=${encodeURIComponent(user?.id || '')}&v=2`,
     };
     return {
       ...baseConfig,

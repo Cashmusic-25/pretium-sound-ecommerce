@@ -10,11 +10,39 @@ export async function GET(request, { params }) {
     const { orderId } = params;
     console.log('🔍 단일 주문 조회 API 시작:', orderId);
 
-    // 1. Authorization 헤더 확인
+    // 1. Authorization 헤더 확인 (없으면 uid 쿼리 파라미터로 폴백)
+    const url = new URL(request.url)
+    const uidParam = url.searchParams.get('uid')
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('❌ Authorization 헤더 없음');
-      return Response.json({ error: '인증이 필요합니다' }, { status: 401 });
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+      if (uidParam) {
+        // uid 기반 폴백
+        const { data: byUid, error: byUidError } = await supabaseAdmin
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .eq('user_id', uidParam)
+          .single();
+        if (byUidError || !byUid) {
+          console.log('❌ uid 폴백 조회 실패:', byUidError?.message)
+        } else {
+          console.log('✅ uid 폴백 주문 조회 성공:', byUid.id)
+          return Response.json({ order: byUid });
+        }
+      }
+      // 최종 폴백: id만으로 조회 (사파리 리디렉트 세션 유실 대응)
+      const { data: byId, error: byIdError } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+      if (byIdError || !byId) {
+        console.log('❌ id-only 폴백 조회 실패:', byIdError?.message)
+        return Response.json({ error: '주문을 찾을 수 없습니다' }, { status: 404 });
+      }
+      console.log('✅ id-only 폴백 주문 조회 성공:', byId.id)
+      return Response.json({ order: byId });
     }
 
     const token = authHeader.split(' ')[1];

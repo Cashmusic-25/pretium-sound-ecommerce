@@ -32,7 +32,7 @@ const STATUS_COLORS = {
 
 export default function AdminOrdersPage() {
   const router = useRouter()
-  const { isAdmin, getAllOrders, updateOrderStatus } = useAuth()
+  const { isAdmin, makeAuthenticatedRequest } = useAuth()
   const [orders, setOrders] = useState([])
   const [filteredOrders, setFilteredOrders] = useState([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -56,45 +56,29 @@ export default function AdminOrdersPage() {
     try {
       setIsLoading(true)
       
-      const { getSupabase } = await import('@/lib/supabase')
-      const supabase = getSupabase()
-      
-      if (!supabase) {
-        console.warn('Supabase 연결 실패')
+      console.log('📦 관리자 주문 조회 시작 (API)...')
+
+      const response = await makeAuthenticatedRequest('/api/admin/orders', {
+        method: 'GET'
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        console.error('주문 조회 실패:', err)
         setOrders([])
         setFilteredOrders([])
         return
       }
-  
-      console.log('📦 관리자 주문 조회 시작...')
-  
-      // 모든 주문 조회 (사용자 정보와 함께)
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          users (
-            name,
-            email
-          )
-        `)
-        .order('created_at', { ascending: false })
-  
-      if (error) {
-        console.error('주문 조회 실패:', error)
-        setOrders([])
-        setFilteredOrders([])
-        return
-      }
-  
+
+      const result = await response.json()
+      const data = result.orders || []
       console.log('✅ 주문 조회 성공:', data.length, '개')
-  
-      // 데이터 형식 변환
+
       const formattedOrders = data.map(order => ({
         id: order.id,
         orderNumber: `PS${order.id}`,
         userId: order.user_id,
-        customerName: order.users?.name || '알 수 없음',
+        customerName: order.users?.name || order.users?.email?.split('@')[0] || '알 수 없음',
         customerEmail: order.users?.email || '알 수 없음',
         items: order.items || [],
         totalAmount: order.total_amount,
@@ -148,33 +132,21 @@ export default function AdminOrdersPage() {
     if (!selectedOrder || !newStatus) return
   
     try {
-      const { getSupabase } = await import('@/lib/supabase')
-      const supabase = getSupabase()
-      
-      if (!supabase) {
-        alert('Supabase 연결 실패')
-        return
-      }
-  
       console.log('🔄 주문 상태 변경 시작:', selectedOrder.id, '→', newStatus)
-  
-      // Supabase에서 주문 상태 업데이트
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedOrder.id)
-        .select()
-  
-      if (error) {
-        console.error('주문 상태 변경 실패:', error)
+
+      const resp = await makeAuthenticatedRequest('/api/admin/orders', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: selectedOrder.id, status: newStatus })
+      })
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        console.error('주문 상태 변경 실패:', err)
         alert('주문 상태 변경에 실패했습니다.')
         return
       }
-  
-      console.log('✅ 주문 상태 변경 성공:', data)
+
+      console.log('✅ 주문 상태 변경 성공')
   
       // 주문 목록 새로고침
       await loadOrders()

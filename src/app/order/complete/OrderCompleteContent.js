@@ -17,17 +17,30 @@ export default function OrderCompleteContent() {
   
   const orderId = searchParams.get('orderId');
   const paymentId = searchParams.get('paymentId');
+  const uid = searchParams.get('uid');
 
   useEffect(() => {
-    if (orderId && user) {
-      fetchOrderData();
-    } else if (!user) {
-      setError('로그인이 필요합니다.');
-      setLoading(false);
-    } else {
-      setError('주문 정보가 없습니다.');
-      setLoading(false);
-    }
+    let cancelled = false;
+    const run = async () => {
+      if (!orderId) {
+        setError('주문 정보가 없습니다.');
+        setLoading(false);
+        return;
+      }
+      if (!user) {
+        // OAuth 리다이렉트 직후 세션 초기화 지연 대비: 잠시 대기 후 재확인
+        await new Promise(r => setTimeout(r, 300));
+      }
+      if (cancelled) return;
+      if (user) {
+        await fetchOrderData();
+      } else {
+        setError('로그인이 필요합니다.');
+        setLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
   }, [orderId, user]);
 
   const fetchOrderData = async () => {
@@ -40,10 +53,32 @@ export default function OrderCompleteContent() {
         const orderResult = await orderResponse.json();
         setOrderData(orderResult.order);
       } else {
-        const errorResult = await orderResponse.json();
-        throw new Error(errorResult.error || '주문 정보 조회 실패');
+        const errorResult = await orderResponse.json().catch(() => ({}));
+        if (paymentId) {
+          console.warn('주문 조회 실패, 결제 검증 폴백 시도:', errorResult?.error);
+          const verifyResp = await fetch('/api/payments/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentId, orderId, userId: uid || user?.id })
+          });
+          if (verifyResp.ok) {
+            const orderResp2 = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+            if (orderResp2.ok) {
+              const orderResult2 = await orderResp2.json();
+              setOrderData(orderResult2.order);
+            } else {
+              const e2 = await orderResp2.json().catch(() => ({}));
+              throw new Error(e2.error || '주문 정보 조회 실패');
+            }
+          } else {
+            const vErr = await verifyResp.json().catch(() => ({}));
+            throw new Error(vErr.error || '결제 검증 실패');
+          }
+        } else {
+          throw new Error(errorResult.error || '주문 정보 조회 실패');
+        }
       }
-  
+
       if (paymentId) {
         try {
           const paymentResponse = await makeAuthenticatedRequest(`/api/payments/${paymentId}`);

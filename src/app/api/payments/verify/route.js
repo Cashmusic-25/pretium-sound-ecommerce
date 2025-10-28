@@ -106,6 +106,26 @@ export async function POST(request) {
     // 5. 결제 상태 확인
     console.log('V2 결제 상태:', paymentData.status);
 
+    // 5-1. 사용자 이메일 기반 user_id 추론 (세션/파라미터가 없을 때)
+    if (!userId) {
+      const emailCandidate = paymentData?.customer?.email || paymentData?.buyer?.email || paymentData?.customerEmail;
+      if (emailCandidate) {
+        try {
+          const { data: userRow } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', emailCandidate)
+            .single();
+          if (userRow?.id) {
+            userId = userRow.id;
+            console.log('💡 이메일로 user_id 추론 성공:', userId);
+          }
+        } catch (e) {
+          console.warn('이메일 기반 user_id 추론 실패:', e?.message);
+        }
+      }
+    }
+
     // 6. 주문 생성 또는 업데이트 (결제 완료만 저장/유지)
     console.log('주문 상태 업데이트/생성 시작...');
     let finalOrderId = orderId;
