@@ -46,8 +46,19 @@ export default function OrderCompleteContent() {
   const fetchOrderData = async () => {
     try {
       console.log('📦 주문 완료 데이터 조회 시작:', orderId);
-
-      const orderResponse = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+      // 1) 인증 없이 uid로 우선 조회 (iOS 리디렉트 세션 유실 대응)
+      let orderResponse = null;
+      if (uid) {
+        try {
+          orderResponse = await fetch(`/api/orders/${orderId}?uid=${encodeURIComponent(uid)}`);
+        } catch (_) {
+          orderResponse = null;
+        }
+      }
+      // 2) 실패 시 인증된 요청으로 재시도
+      if (!orderResponse || !orderResponse.ok) {
+        orderResponse = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+      }
       
       if (orderResponse.ok) {
         const orderResult = await orderResponse.json();
@@ -55,14 +66,22 @@ export default function OrderCompleteContent() {
       } else {
         const errorResult = await orderResponse.json().catch(() => ({}));
         if (paymentId) {
-          console.warn('주문 조회 실패, 결제 검증 폴백 시도:', errorResult?.error);
+          // 콘솔 경고 레벨 완화
+          console.info('주문 조회 실패, 결제 검증 폴백 시도');
           const verifyResp = await fetch('/api/payments/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paymentId, orderId, userId: uid || user?.id })
           });
           if (verifyResp.ok) {
-            const orderResp2 = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+            // 검증 직후엔 uid로 우선 조회하여 토큰 준비 지연을 회피
+            let orderResp2 = null;
+            if (uid) {
+              orderResp2 = await fetch(`/api/orders/${orderId}?uid=${encodeURIComponent(uid)}`);
+            }
+            if (!orderResp2 || !orderResp2.ok) {
+              orderResp2 = await makeAuthenticatedRequest(`/api/orders/${orderId}`);
+            }
             if (orderResp2.ok) {
               const orderResult2 = await orderResp2.json();
               setOrderData(orderResult2.order);
