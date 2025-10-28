@@ -110,14 +110,26 @@ export default function OrdersPage() {
         throw new Error(result.error || '다운로드 실패');
       }
 
-      // 다운로드 링크로 리다이렉트
-      const link = document.createElement('a');
-      link.href = result.downloadUrl;
-      link.download = filename;
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // 교차 출처 download 경고 제거: Blob 다운로드 시도 → 실패 시 새 탭 열기 폴백
+      try {
+        const fileResp = await fetch(result.downloadUrl, { credentials: 'omit' });
+        const blob = await fileResp.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename || 'download';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+      } catch (_) {
+        const link = document.createElement('a');
+        link.href = result.downloadUrl;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
 
       console.log('✅ 다운로드 성공');
       
