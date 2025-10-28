@@ -90,6 +90,36 @@ export async function POST(request) {
       throw new Error('주문 정보를 조회할 수 없습니다.');
     }
 
+    // (보강) iOS 리다이렉트 폴백: items 미전달 시 orderName으로 추론
+    let items = itemsValue || [];
+    try {
+      if (!items || items.length === 0) {
+        const rawOrderName = paymentData?.orderName || paymentData?.orderNameKo || paymentData?.orderNameEn || '';
+        const firstTitle = String(rawOrderName).split(' 외 ')[0].trim();
+        if (firstTitle) {
+          const { data: productMatch } = await supabase
+            .from('products')
+            .select('id, title, price, category')
+            .ilike('title', firstTitle)
+            .limit(1)
+            .single();
+          if (productMatch?.id) {
+            items = [{
+              id: productMatch.id,
+              title: productMatch.title,
+              price: productMatch.price,
+              quantity: 1,
+              category: productMatch.category,
+              icon: '🎵'
+            }];
+            console.log('💡 orderName으로 items 복원:', items);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('items 복원 실패(계속 진행):', e?.message);
+    }
+
     // 4. 결제 금액 검증
     const portoneAmount = paymentData.amount?.total || paymentData.amount;
     const orderAmount = existingOrder?.total_amount ?? totalAmount ?? portoneAmount;
@@ -138,7 +168,7 @@ export async function POST(request) {
         total_amount: orderAmount,
         updated_at: new Date().toISOString()
       };
-      if (!existingOrder.items || existingOrder.items.length === 0) {
+      if ((!existingOrder.items || existingOrder.items.length === 0) && items && items.length > 0) {
         fieldsToUpdate.items = items;
       }
       if (!existingOrder.user_id && userId) {
@@ -158,7 +188,7 @@ export async function POST(request) {
         .insert([{
           id: orderId,
           user_id: userId,
-          items: items,
+          items: items || [],
           total_amount: orderAmount,
           shipping_address: {},
           status: 'processing',
