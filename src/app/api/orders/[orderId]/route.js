@@ -53,7 +53,30 @@ export async function GET(request, { params }) {
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
     
     if (authError || !user) {
-      console.error('❌ 인증 실패:', authError);
+      // 토큰이 있어도 유효하지 않으면 uid/id 폴백으로 조회 시도 (iOS Safari 세션 유실 대응)
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+      if (uidParam) {
+        const { data: byUid, error: byUidError } = await supabaseAdmin
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .eq('user_id', uidParam)
+          .single();
+        if (byUidError == null && byUid) {
+          console.log('✅ 토큰 무효 → uid 폴백 주문 조회 성공:', byUid.id)
+          return Response.json({ order: byUid });
+        }
+      }
+      const { data: byId, error: byIdError } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+      if (byIdError == null && byId) {
+        console.log('✅ 토큰 무효 → id-only 폴백 주문 조회 성공:', byId.id)
+        return Response.json({ order: byId });
+      }
+      console.error('❌ 인증 실패 및 폴백 조회 실패:', authError);
       return Response.json({ error: '유효하지 않은 토큰입니다' }, { status: 401 });
     }
 
