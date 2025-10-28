@@ -4,7 +4,7 @@ const PORTONE_API_BASE = 'https://api.portone.io';
 
 export async function POST(request) {
   try {
-    const { paymentId, orderId, items = [], totalAmount, userId: userIdFromClient } = await request.json();
+    const { paymentId, orderId, items: itemsInput = [], totalAmount, userId: userIdFromClient } = await request.json();
     console.log('V2 결제 검증 요청:', { paymentId, orderId });
 
     if (!paymentId || !orderId) {
@@ -91,9 +91,9 @@ export async function POST(request) {
     }
 
     // (보강) iOS 리다이렉트 폴백: items 미전달 시 orderName으로 추론
-    let items = itemsValue || [];
+    let normalizedItems = itemsInput || [];
     try {
-      if (!items || items.length === 0) {
+      if (!normalizedItems || normalizedItems.length === 0) {
         const rawOrderName = paymentData?.orderName || paymentData?.orderNameKo || paymentData?.orderNameEn || '';
         const firstTitle = String(rawOrderName).split(' 외 ')[0].trim();
         if (firstTitle) {
@@ -104,7 +104,7 @@ export async function POST(request) {
             .limit(1)
             .single();
           if (productMatch?.id) {
-            items = [{
+            normalizedItems = [{
               id: productMatch.id,
               title: productMatch.title,
               price: productMatch.price,
@@ -112,7 +112,7 @@ export async function POST(request) {
               category: productMatch.category,
               icon: '🎵'
             }];
-            console.log('💡 orderName으로 items 복원:', items);
+            console.log('💡 orderName으로 items 복원:', normalizedItems);
           }
         }
       }
@@ -168,8 +168,8 @@ export async function POST(request) {
         total_amount: orderAmount,
         updated_at: new Date().toISOString()
       };
-      if ((!existingOrder.items || existingOrder.items.length === 0) && items && items.length > 0) {
-        fieldsToUpdate.items = items;
+      if ((!existingOrder.items || existingOrder.items.length === 0) && normalizedItems && normalizedItems.length > 0) {
+        fieldsToUpdate.items = normalizedItems;
       }
       if (!existingOrder.user_id && userId) {
         fieldsToUpdate.user_id = userId;
@@ -188,7 +188,7 @@ export async function POST(request) {
         .insert([{
           id: orderId,
           user_id: userId,
-          items: items || [],
+          items: normalizedItems || [],
           total_amount: orderAmount,
           shipping_address: {},
           status: 'processing',
