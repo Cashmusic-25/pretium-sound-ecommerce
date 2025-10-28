@@ -199,10 +199,33 @@ export async function POST(request) {
         .select()
         .single();
       if (insertError) {
-        console.error('주문 생성 실패:', insertError);
-        throw new Error('주문 생성 실패');
+        // 중복 키(이미 생성)일 경우 정상 흐름으로 처리
+        if (insertError.code === '23505') {
+          const { data: existing } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single();
+          if (existing) {
+            finalOrderId = existing.id;
+            // 비어있는 필드 보완 업데이트
+            const patch = {};
+            if ((!existing.items || existing.items.length === 0) && normalizedItems?.length) patch.items = normalizedItems;
+            if (!existing.user_id && userId) patch.user_id = userId;
+            if (Object.keys(patch).length) {
+              await supabase.from('orders').update(patch).eq('id', orderId);
+            }
+          } else {
+            console.error('중복 처리 중 재조회 실패');
+            throw new Error('주문 생성 실패');
+          }
+        } else {
+          console.error('주문 생성 실패:', insertError);
+          throw new Error('주문 생성 실패');
+        }
+      } else {
+        finalOrderId = inserted.id;
       }
-      finalOrderId = inserted.id;
     }
 
     // 업데이트 에러는 각 분기에서 처리함
