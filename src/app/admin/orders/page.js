@@ -334,8 +334,11 @@ export default function AdminOrdersPage() {
                             <div className="text-sm font-medium text-gray-900">
                               {order.orderNumber}
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {order.items?.length || 0}개 상품
+                            <div
+                              className="text-sm text-gray-500 max-w-[360px] truncate"
+                              title={(order.items?.length ? order.items.map(item => item.title).join(', ') : '상품 없음')}
+                            >
+                              {order.items?.length ? order.items.map(item => item.title).join(', ') : '상품 없음'}
                             </div>
                           </div>
                         </td>

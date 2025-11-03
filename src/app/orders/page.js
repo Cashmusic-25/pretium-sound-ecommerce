@@ -78,7 +78,7 @@ export default function OrdersPage() {
     loadUserOrders()
   }, [isAuthenticated, user, router, makeAuthenticatedRequest]) // makeAuthenticatedRequest 의존성 추가
 
-  // ✅ 파일 다운로드 함수 (이미 수정되어 있음)
+  // ✅ 파일 다운로드 함수 (스트리밍으로 강제 다운로드)
   const handleDownload = async (orderId, productId, fileId, filename) => {
     if (!user?.id) {
       alert('로그인이 필요합니다.');
@@ -97,44 +97,47 @@ export default function OrdersPage() {
 
       console.log('📥 다운로드 시작:', { orderId, fileId, filename });
 
-      // ✅ 인증된 요청 사용
+      // ✅ 인증된 요청 사용 (스트림 직접 응답)
       const response = await makeAuthenticatedRequest(
         `/api/download/${orderId}/${fileId}`,
-        {
-          method: 'GET'
-        }
+        { method: 'GET' }
       );
-      const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || '다운로드 실패');
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || '다운로드 실패');
       }
 
-      // 교차 출처 download 경고 제거: Blob 다운로드 시도 → 실패 시 새 탭 열기 폴백
-      try {
-        const fileResp = await fetch(result.downloadUrl, { credentials: 'omit' });
-        const blob = await fileResp.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = filename || 'download';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-      } catch (_) {
-        const link = document.createElement('a');
-        link.href = result.downloadUrl;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      const contentDisposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition');
+      const fallbackName = filename || 'download';
+      let finalFilename = fallbackName;
+      if (contentDisposition) {
+        const matchStar = contentDisposition.match(/filename\*\=UTF-8''([^;\n]+)/i);
+        const matchBasic = contentDisposition.match(/filename\s*=\s*"?([^";\n]+)"?/i);
+        if (matchStar && matchStar[1]) {
+          try { finalFilename = decodeURIComponent(matchStar[1]); } catch (_) { finalFilename = fallbackName; }
+        } else if (matchBasic && matchBasic[1]) {
+          finalFilename = matchBasic[1];
+        }
       }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = finalFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
 
       console.log('✅ 다운로드 성공');
-      
-      // 성공 알림
-      alert(`${filename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${result.remainingDays}일`);
+      const remainingDaysHeader = response.headers.get('X-Download-Remaining-Days');
+      if (remainingDaysHeader) {
+        alert(`${finalFilename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${remainingDaysHeader}일`);
+      } else {
+        alert(`${finalFilename} 다운로드가 시작되었습니다.`);
+      }
 
     } catch (error) {
       console.error('❌ 다운로드 오류:', error);

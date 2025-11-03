@@ -8,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export async function GET(request, { params }) {
   try {
-    const { fileId } = params
+    const { fileId } = await params
     console.log('🔽 관리자 PDF 다운로드 요청:', fileId)
 
     // 1. Authorization 헤더 확인
@@ -111,15 +111,52 @@ export async function GET(request, { params }) {
 
     console.log('✅ 관리자 다운로드 링크 생성 성공')
 
-    // 8. 다운로드 정보 반환
-    return NextResponse.json({
-      success: true,
-      downloadUrl: signedUrlData.signedUrl,
-      filename: targetFile.filename || targetFile.name || `${productTitle}.pdf`,
-      fileSize: targetFile.size,
-      expiresIn: 3600, // 1시간
-      productTitle: productTitle
-    })
+    // 8. Supabase Storage 객체를 서비스 롤로 직접 프록시(우선)
+    const safeJoinPath = (p) => p.split('/').map(encodeURIComponent).join('/')
+    const objectUrl = `${supabaseUrl}/storage/v1/object/ebooks/${safeJoinPath(filePath)}`
+
+    let fileResponse = null
+    try {
+      fileResponse = await fetch(objectUrl, {
+        headers: { Authorization: `Bearer ${supabaseServiceKey}` }
+      })
+    } catch (e) {
+      console.warn('⚠️ 서비스 키 직접 다운로드 네트워크 오류, 서명 URL로 폴백:', e?.message)
+      fileResponse = null
+    }
+
+    if (!fileResponse || !fileResponse.ok) {
+      try {
+        fileResponse = await fetch(signedUrlData.signedUrl)
+      } catch (e2) {
+        const msg = `파일 가져오기 실패(폴백 포함): ${e2?.message || 'unknown'}`
+        console.error('❌', msg)
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+      if (!fileResponse.ok) {
+        const msg = `파일 가져오기 실패: ${fileResponse.status} ${fileResponse.statusText}`
+        console.error('❌', msg)
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    }
+
+    const filenameRaw = targetFile.filename || targetFile.name || `${productTitle}.pdf`
+    const contentType = (filenameRaw?.toLowerCase().endsWith('.pdf'))
+      ? 'application/pdf'
+      : (fileResponse.headers.get('content-type') || 'application/octet-stream')
+
+    const encodedFilename = encodeURIComponent(filenameRaw).replace(/\(/g, '%28').replace(/\)/g, '%29')
+    const extMatch = (filenameRaw.match(/\.[a-zA-Z0-9]+$/) || [])[0] || (contentType === 'application/pdf' ? '.pdf' : '')
+    const asciiFallback = `download${extMatch || ''}`
+    const contentDisposition = `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`
+
+    const headers = new Headers()
+    headers.set('Content-Type', contentType)
+    headers.set('Content-Disposition', contentDisposition)
+    headers.set('Cache-Control', 'private, max-age=0, no-store')
+    headers.set('Access-Control-Expose-Headers', 'Content-Disposition')
+
+    return new Response(fileResponse.body, { headers })
 
   } catch (error) {
     console.error('💥 관리자 PDF 다운로드 API 오류:', error)

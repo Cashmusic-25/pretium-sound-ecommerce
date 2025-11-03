@@ -139,37 +139,42 @@ export default function OrderCompleteContent() {
         { method: 'GET' }
       );
 
-      const result = await response.json();
-
       if (!response.ok) {
-        throw new Error(result.error || '다운로드 실패');
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.error || '다운로드 실패');
       }
 
-      // Blob 다운로드(사파리 교차 출처 download 경고 회피) → 실패 시 새 탭 폴백
-      try {
-        const fileResp = await fetch(result.downloadUrl, { credentials: 'omit' });
-        const blob = await fileResp.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = objectUrl;
-        link.download = filename || 'download';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
-      } catch (_) {
-        const link = document.createElement('a');
-        link.href = result.downloadUrl;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      const contentDisposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition');
+      const fallbackName = filename || 'download';
+      let finalFilename = fallbackName;
+      if (contentDisposition) {
+        const matchStar = contentDisposition.match(/filename\*\=UTF-8''([^;\n]+)/i);
+        const matchBasic = contentDisposition.match(/filename\s*=\s*"?([^";\n]+)"?/i);
+        if (matchStar && matchStar[1]) {
+          try { finalFilename = decodeURIComponent(matchStar[1]); } catch (_) { finalFilename = fallbackName; }
+        } else if (matchBasic && matchBasic[1]) {
+          finalFilename = matchBasic[1];
+        }
       }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = finalFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
 
       console.log('✅ 다운로드 성공');
-      
-      // 법적 조치 문구와 함께 성공 알림
-      const alertMessage = `${filename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${result.remainingDays}일\n\n${result.legalNotice || '⚠️ 저작권 보호 안내: 본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다.'}`;
+
+      const remainingDaysHeader = response.headers.get('X-Download-Remaining-Days');
+      const legalNoticeHeader = response.headers.get('X-Download-Notice');
+      const remainingDays = remainingDaysHeader ? Number(remainingDaysHeader) : undefined;
+      const alertMessage = remainingDays !== undefined
+        ? `${finalFilename} 다운로드가 시작되었습니다.\n남은 다운로드 기간: ${remainingDays}일\n\n${legalNoticeHeader || '⚠️ 저작권 보호 안내: 본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다.'}`
+        : `${finalFilename} 다운로드가 시작되었습니다.`;
       alert(alertMessage);
 
     } catch (error) {

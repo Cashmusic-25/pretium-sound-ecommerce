@@ -3,7 +3,7 @@ const PORTONE_API_BASE = 'https://api.portone.io';
 
 export async function GET(request, { params }) {
   try {
-    const { paymentId } = params;
+    const { paymentId } = await params;
 
     // 1. 포트원 액세스 토큰 발급
     const getTokenResponse = await fetch(`${PORTONE_API_BASE}/login/api-secret`, {

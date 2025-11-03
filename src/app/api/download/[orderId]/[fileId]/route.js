@@ -8,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function GET(request, { params }) {
   try {
-    const { orderId, fileId } = params;
+    const { orderId, fileId } = await params;
 
     console.log('📥 다운로드 요청:', { orderId, fileId });
 
@@ -111,8 +111,7 @@ export async function GET(request, { params }) {
       }, { status: 403 });
     }
 
-    // 7. 다운로드 이력 기록 (Service Role 사용)
-    await recordDownloadHistory(supabaseAdmin, user.id, orderId, fileId, targetFile.filename);
+    // 7. 다운로드 이력 기록은 실제 파일명 확정 후 아래에서 수행
 
     // 8. Supabase Storage에서 signed URL 생성 (Service Role 필요)
     const originalPathCandidate = targetFile.filePath || targetFile.path || '';
@@ -147,6 +146,7 @@ export async function GET(request, { params }) {
 
     let signedUrlData = null;
     let lastError = null;
+    let pathUsed = null;
     for (const path of candidatePaths) {
       console.log('☁️ Signed URL 시도 경로:', path);
       const { data, error } = await supabaseAdmin.storage
@@ -154,6 +154,7 @@ export async function GET(request, { params }) {
         .createSignedUrl(path, 3600);
       if (!error && data?.signedUrl) {
         signedUrlData = data;
+        pathUsed = path;
         break;
       }
       lastError = error;
@@ -181,16 +182,57 @@ export async function GET(request, { params }) {
 
     console.log('✅ 다운로드 링크 생성 성공');
 
-    // 9. 다운로드 정보 반환 (법적 조치 문구 포함)
-    return NextResponse.json({
-      success: true,
-      downloadUrl: signedUrlData.signedUrl,
-      filename: targetFile.filename,
-      fileSize: targetFile.size,
-      expiresIn: 3600, // 1시간
-      remainingDays: 365 - daysDiff,
-      legalNotice: "⚠️ 저작권 보호 안내: 본 교재는 저작권법에 의해 보호받습니다. 무단 복제, 배포, 공유 시 법적 조치를 받을 수 있습니다."
-    });
+    // 9. Supabase Storage 객체를 서비스 롤로 직접 프록시(우선)
+    let fileResponse = null;
+    const safeJoinPath = (p) => p.split('/').map(encodeURIComponent).join('/');
+    if (pathUsed) {
+      const objectUrl = `${supabaseUrl}/storage/v1/object/ebooks/${safeJoinPath(pathUsed)}`;
+      try {
+        fileResponse = await fetch(objectUrl, {
+          headers: { Authorization: `Bearer ${supabaseServiceKey}` }
+        });
+      } catch (e) {
+        console.warn('⚠️ 서비스 키 직접 다운로드 네트워크 오류, 서명 URL로 폴백:', e?.message);
+        fileResponse = null;
+      }
+    }
+    // 직접 프록시 실패 시 서명 URL로 폴백
+    if (!fileResponse || !fileResponse.ok) {
+      try {
+        fileResponse = await fetch(signedUrlData.signedUrl);
+      } catch (e2) {
+        const msg = `파일 가져오기 실패(폴백 포함): ${e2?.message || 'unknown'}`;
+        console.error('❌', msg);
+        return NextResponse.json({ error: msg }, { status: 500 });
+      }
+      if (!fileResponse.ok) {
+        const msg = `파일 가져오기 실패: ${fileResponse.status} ${fileResponse.statusText}`;
+        console.error('❌', msg);
+        return NextResponse.json({ error: msg }, { status: 500 });
+      }
+    }
+
+    const filenameRaw = targetFile.filename || targetFile.name || (pathUsed || original).split('/').pop() || 'download.pdf';
+    const contentType = (targetFile.type === 'pdf' || filenameRaw.toLowerCase().endsWith('.pdf'))
+      ? 'application/pdf'
+      : (fileResponse.headers.get('content-type') || 'application/octet-stream');
+
+    const encodedFilename = encodeURIComponent(filenameRaw).replace(/\(/g, '%28').replace(/\)/g, '%29');
+    const extMatch = (filenameRaw.match(/\.[a-zA-Z0-9]+$/) || [])[0] || (contentType === 'application/pdf' ? '.pdf' : '');
+    const asciiFallback = `download${extMatch || ''}`;
+    const contentDisposition = `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`;
+
+    // 확정된 파일명으로 다운로드 이력 기록 (NULL 방지)
+    await recordDownloadHistory(supabaseAdmin, user.id, orderId, fileId, filenameRaw);
+
+    const headers = new Headers();
+    headers.set('Content-Type', contentType);
+    headers.set('Content-Disposition', contentDisposition);
+    headers.set('Cache-Control', 'private, max-age=0, no-store');
+    headers.set('X-Download-Remaining-Days', String(365 - daysDiff));
+    headers.set('Access-Control-Expose-Headers', 'Content-Disposition, X-Download-Remaining-Days');
+
+    return new Response(fileResponse.body, { headers });
 
   } catch (error) {
     console.error('❌ 다운로드 API 오류:', error);

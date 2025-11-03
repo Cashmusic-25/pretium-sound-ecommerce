@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function GET(request, { params }) {
   try {
-    const { orderId } = params;
+    const { orderId } = await params;
     console.log('🔍 단일 주문 조회 API 시작:', orderId);
 
     // 1. Authorization 헤더 확인 (없으면 uid 쿼리 파라미터로 폴백)
@@ -116,7 +116,7 @@ export async function GET(request, { params }) {
 
 export async function PATCH(request, { params }) {
   try {
-    const { orderId } = params;
+    const { orderId } = await params;
     console.log('🔄 주문 상태 업데이트 API 시작:', orderId);
 
     // 1. Authorization 헤더 확인

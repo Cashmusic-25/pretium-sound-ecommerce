@@ -571,49 +571,45 @@ export default function AdminProductEditPage() {
         return
       }
       
-      // Authorization 헤더와 함께 요청
+      // Authorization 헤더와 함께 요청 (스트림 직접 응답)
       const response = await fetch(`/api/download/prduct-pdf/${fileId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${session.access_token}`
         }
       })
       
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || 'PDF 다운로드에 실패했습니다.')
       }
       
-      // 응답에서 signed URL 받기
-      const downloadData = await response.json()
-      
-      if (!downloadData.success || !downloadData.downloadUrl) {
-        throw new Error('다운로드 링크 생성에 실패했습니다.')
+      const contentDisposition = response.headers.get('Content-Disposition') || response.headers.get('content-disposition')
+      const fallbackName = file.name || file.filename || 'product.pdf'
+      let finalFilename = fallbackName
+      if (contentDisposition) {
+        const matchStar = contentDisposition.match(/filename\*\=UTF-8''([^;\n]+)/i)
+        const matchBasic = contentDisposition.match(/filename\s*=\s*"?([^";\n]+)"?/i)
+        if (matchStar && matchStar[1]) {
+          try { finalFilename = decodeURIComponent(matchStar[1]) } catch (_) { finalFilename = fallbackName }
+        } else if (matchBasic && matchBasic[1]) {
+          finalFilename = matchBasic[1]
+        }
       }
       
-      // signed URL로 실제 파일 다운로드
-      const fileResponse = await fetch(downloadData.downloadUrl)
-      if (!fileResponse.ok) {
-        throw new Error('파일 다운로드에 실패했습니다.')
-      }
-      
-      // Blob으로 파일 다운로드
-      const blob = await fileResponse.blob()
+      const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       
-      // 다운로드 링크 생성 및 클릭
       const a = document.createElement('a')
       a.href = url
-      a.download = downloadData.filename || file.name || file.filename || 'product.pdf'
+      a.download = finalFilename
       document.body.appendChild(a)
       a.click()
       
-      // 정리
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      setSuccess(`"${downloadData.filename}" 다운로드가 시작되었습니다.`)
+      setSuccess(`"${finalFilename}" 다운로드가 시작되었습니다.`)
       
     } catch (error) {
       console.error('❌ 관리자 PDF 다운로드 실패:', error)
