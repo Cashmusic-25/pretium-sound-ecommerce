@@ -1880,7 +1880,7 @@ export default function AdminProductEditPage() {
             
             <div className="mb-6">
               <p className="text-sm text-gray-700 mb-2">
-                <span className="font-medium">"{showDeleteConfirm}"</span> 카테고리를 정말 삭제하시겠습니까?
+                <span className="font-medium">&quot;{showDeleteConfirm}&quot;</span> 카테고리를 정말 삭제하시겠습니까?
               </p>
               {['피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'].includes(showDeleteConfirm) && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">

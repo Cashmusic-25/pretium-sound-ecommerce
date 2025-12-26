@@ -82,6 +82,23 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
+// 응답이 JSON이 아닐 수 있으니(예: 413 Request Entity Too Large) 안전 파싱
+async function safeParseJsonResponse(response) {
+  const contentType = response.headers.get('content-type') || ''
+  const text = await response.text()
+  if (!text) return { data: null, rawText: '' }
+
+  // content-type이 json이거나, 텍스트가 JSON처럼 보이면 파싱 시도
+  const looksJson = contentType.includes('application/json') || /^\s*[\[{]/.test(text)
+  if (!looksJson) return { data: null, rawText: text }
+
+  try {
+    return { data: JSON.parse(text), rawText: text }
+  } catch (_) {
+    return { data: null, rawText: text }
+  }
+}
+
 export default function AdminProductAddPage() {
   const router = useRouter()
   const { isAdmin } = useAuth()
@@ -493,25 +510,86 @@ export default function AdminProductAddPage() {
     setError('')
 
     try {
-      // FormData 생성
-      const formData = new FormData()
-      formData.append('file', file)
+      // 1) 우선 Supabase Storage로 직접 업로드 (배포 환경의 요청 바디 제한(413) 회피)
+      console.log('☁️ Supabase Storage 직접 업로드 시작...')
 
-      console.log('🌐 API 호출 시작...')
-
-      // API 라우트 호출
-      const response = await fetch('/api/upload/ebook', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || '업로드 실패')
+      const { getSupabase } = await import('../../../../lib/supabase')
+      const supabase = getSupabase()
+      if (!supabase) {
+        throw new Error('Supabase 연결이 필요합니다')
       }
 
-      console.log('✅ 업로드 성공:', result)
+      const timestamp = Date.now()
+      const randomStr = Math.random().toString(36).substring(2)
+      const fileExt = file.name.split('.').pop().toLowerCase()
+      const storageFileName = `ebook_${timestamp}_${randomStr}.${fileExt}`
+      // 기존 데이터/다운로드 API 호환을 위해 'ebooks/' 프리픽스를 포함한 경로로 저장
+      const storagePath = `ebooks/${storageFileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('ebooks')
+        .upload(storagePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'application/octet-stream'
+        })
+
+      if (uploadError) {
+        // Supabase 업로드가 막혀있는 환경이면 기존 API로 폴백
+        console.warn('⚠️ Supabase 직접 업로드 실패, API 업로드로 폴백:', uploadError)
+
+        const formData = new FormData()
+        formData.append('file', file)
+
+        const response = await fetch('/api/upload/ebook', {
+          method: 'POST',
+          body: formData
+        })
+
+        const { data: json, rawText } = await safeParseJsonResponse(response)
+
+        if (!response.ok) {
+          const msg =
+            (json && (json.error || json.message)) ||
+            (rawText ? `${rawText}` : `업로드 실패 (${response.status} ${response.statusText})`)
+          throw new Error(msg)
+        }
+
+        const result = json || {}
+        console.log('✅ API 업로드 성공:', result)
+
+        // 파일 ID 생성
+        const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2)}`
+        
+        const newFile = {
+          id: fileId,
+          filename: result.filename || file.name,
+          filePath: result.filePath,
+          type: result.type || getFileType(fileExt),
+          size: result.size || formatFileSize(file.size),
+          description: '', // 나중에 사용자가 입력
+          uploadedAt: result.uploadedAt || new Date().toISOString()
+        }
+
+        setProductForm(prev => ({
+          ...prev,
+          files: [...prev.files, newFile]
+        }))
+
+        setSuccess(`${file.name} 업로드 완료!`)
+        e.target.value = ''
+        return
+      }
+
+      const result = {
+        filename: file.name,
+        filePath: storagePath,
+        type: getFileType(fileExt),
+        size: formatFileSize(file.size),
+        uploadedAt: new Date().toISOString()
+      }
+
+      console.log('✅ Supabase 직접 업로드 성공:', result)
 
       // 파일 ID 생성
       const fileId = `file_${Date.now()}_${Math.random().toString(36).substring(2)}`
@@ -1219,7 +1297,7 @@ export default function AdminProductAddPage() {
                     </div>
                     <input
                       type="file"
-                      accept=".pdf,.zip,.mp3,.wav,.mp4,.avi"
+                      accept=".pdf,.zip,.rar,.7z,.mp3,.wav,.mp4,.avi"
                       onChange={handleFileUpload}
                       className="hidden"
                       disabled={isUploadingFile}
@@ -1595,7 +1673,7 @@ export default function AdminProductAddPage() {
             
             <div className="mb-6">
               <p className="text-sm text-gray-700 mb-2">
-                <span className="font-medium">"{showDeleteConfirm}"</span> 카테고리를 정말 삭제하시겠습니까?
+                <span className="font-medium">&quot;{showDeleteConfirm}&quot;</span> 카테고리를 정말 삭제하시겠습니까?
               </p>
               {['피아노', '기타', '보컬', '드럼', '바이올린', '음악이론'].includes(showDeleteConfirm) && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2">

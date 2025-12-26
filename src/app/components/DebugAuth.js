@@ -1,20 +1,18 @@
 'use client'
 import { useAuth } from '../contexts/AuthContext'
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 
 export default function DebugAuth() {
   const { user, loading, error, supabaseReady, retry } = useAuth()
-  const [clientInfo, setClientInfo] = useState({})
-
-  useEffect(() => {
-    // 클라이언트 사이드 정보 수집
-    setClientInfo({
-      isClient: typeof window !== 'undefined',
-      userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'SSR',
-      url: typeof window !== 'undefined' ? window.location.href : 'SSR',
-      localStorage: typeof window !== 'undefined' && !!window.localStorage,
+  const clientInfo = useMemo(() => {
+    const isClient = typeof window !== 'undefined'
+    return {
+      isClient,
+      userAgent: isClient ? window.navigator.userAgent : 'SSR',
+      url: isClient ? window.location.href : 'SSR',
+      localStorage: isClient && !!window.localStorage,
       timestamp: new Date().toISOString()
-    })
+    }
   }, [])
 
   return (

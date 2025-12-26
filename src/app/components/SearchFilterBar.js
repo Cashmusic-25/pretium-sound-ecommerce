@@ -188,7 +188,7 @@ export default function SearchFilterBar() {
         <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-gray-200">
           {searchTerm && (
             <span className="inline-flex items-center px-3 py-1 bg-indigo-100 text-indigo-800 text-sm rounded-full">
-              검색: "{searchTerm}"
+              검색: &quot;{searchTerm}&quot;
               <button
                 onClick={() => setSearchTerm('')}
                 className="ml-2 text-indigo-600 hover:text-indigo-800"

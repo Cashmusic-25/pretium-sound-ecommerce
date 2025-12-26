@@ -109,6 +109,20 @@ const ToastContainer = ({ toasts, onRemove }) => {
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
+  const removeToast = useCallback((id) => {
+    // 제거 애니메이션 시작
+    setToasts(prev => 
+      prev.map(toast => 
+        toast.id === id ? { ...toast, removing: true } : toast
+      )
+    )
+
+    // 300ms 후 실제 제거
+    setTimeout(() => {
+      setToasts(prev => prev.filter(toast => toast.id !== id))
+    }, 300)
+  }, [])
+
   const addToast = useCallback((message, type = TOAST_TYPES.INFO, title = null, duration = 4000) => {
     const id = Date.now() + Math.random()
     const newToast = {
@@ -129,21 +143,7 @@ export function ToastProvider({ children }) {
     }
 
     return id
-  }, [])
-
-  const removeToast = useCallback((id) => {
-    // 제거 애니메이션 시작
-    setToasts(prev => 
-      prev.map(toast => 
-        toast.id === id ? { ...toast, removing: true } : toast
-      )
-    )
-
-    // 300ms 후 실제 제거
-    setTimeout(() => {
-      setToasts(prev => prev.filter(toast => toast.id !== id))
-    }, 300)
-  }, [])
+  }, [removeToast])
 
   const removeAllToasts = useCallback(() => {
     setToasts([])
