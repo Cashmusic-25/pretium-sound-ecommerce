@@ -1,10 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // ESLint 빌드 시 무시 (배포용)
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
+  // 로컬/CI에서 상위 디렉토리의 다른 lockfile 때문에 루트 추론이 틀어지는 경고를 방지
+  // (Next 16 build 출력의 "multiple lockfiles" 경고 대응)
+  outputFileTracingRoot: __dirname,
+
   // 프로덕션 빌드 시 console.log 자동 제거
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
@@ -17,7 +16,12 @@ const nextConfig = {
   
   // 이미지 최적화 설정 (선택사항)
   images: {
-    domains: ['diwqgwwppplvzqkqsrie.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'diwqgwwppplvzqkqsrie.supabase.co',
+      },
+    ],
   }
 }
 
